@@ -1,5 +1,7 @@
 import difflib
 import re
+import time
+from collections import deque
 
 import numpy as np
 import sounddevice as sd
@@ -93,69 +95,93 @@ def mic_listener(
     get_asr_model,
     min_speech_seconds: float,
     end_silence_seconds: float,
+    pre_speech_seconds: float,
+    wake_followup_seconds: float,
     tts_playing_event,
     tts_interrupt_event,
     wake_words: list[str],
     hotwords: list[str] | None,
     normalize_text,
 ):
-    local_vad_model = get_vad_model()
-    local_asr_model = get_asr_model()
+    while True:
+        try:
+            local_vad_model = get_vad_model()
+            local_asr_model = get_asr_model()
 
-    sample_rate = 16000
-    block_size = 512
-    min_speech_samples = int(sample_rate * min_speech_seconds)
-    silence_blocks_to_end = max(1, int(end_silence_seconds * sample_rate / block_size))
+            sample_rate = 16000
+            block_size = 512
+            min_speech_samples = int(sample_rate * min_speech_seconds)
+            silence_blocks_to_end = max(1, int(end_silence_seconds * sample_rate / block_size))
+            pre_speech_blocks = max(1, int(pre_speech_seconds * sample_rate / block_size))
 
-    print("[ASR] Microphone listener started.")
+            print(
+                f"[ASR] Microphone listener started. pre_speech={pre_speech_seconds:.2f}s, "
+                f"wake_followup={wake_followup_seconds:.2f}s"
+            )
 
-    with sd.InputStream(
-        channels=1,
-        samplerate=sample_rate,
-        dtype="float32",
-        blocksize=block_size,
-    ) as stream:
-        speech_chunks = []
-        silence_block_count = 0
-        utterance_active = False
-
-        while True:
-            block, _ = stream.read(block_size)
-            pcm = block[:, 0].astype(np.float32)
-            pcm_tensor = torch.from_numpy(pcm)
-            speech_prob = local_vad_model(pcm_tensor, sample_rate).item()
-            speaking_now = speech_prob > 0.35
-
-            if speaking_now and tts_playing_event.is_set():
-                print("[TTS] Interrupted by user speech.")
-                tts_interrupt_event.set()
-
-            if speaking_now:
-                speech_chunks.append(pcm)
-                silence_block_count = 0
-                utterance_active = True
-                continue
-
-            if utterance_active:
-                speech_chunks.append(pcm)
-                silence_block_count += 1
-
-                if silence_block_count < silence_blocks_to_end:
-                    continue
-
-                audio = np.concatenate(speech_chunks)
+            with sd.InputStream(
+                channels=1,
+                samplerate=sample_rate,
+                dtype="float32",
+                blocksize=block_size,
+            ) as stream:
                 speech_chunks = []
                 silence_block_count = 0
                 utterance_active = False
+                pre_speech_buffer = deque(maxlen=pre_speech_blocks)
+                wake_followup_until = 0.0
 
-                if len(audio) < min_speech_samples:
-                    continue
+                while True:
+                    block, _ = stream.read(block_size)
+                    pcm = block[:, 0].astype(np.float32)
+                    pcm_tensor = torch.from_numpy(pcm)
+                    speech_prob = local_vad_model(pcm_tensor, sample_rate).item()
+                    speaking_now = speech_prob > 0.35
+                    pre_speech_buffer.append(pcm.copy())
 
-                text = transcribe_audio(local_asr_model, audio, hotwords=hotwords)
-                if text:
-                    print(f"[ASR HEARD]: {text}")
-                    wake_command = extract_wake_command(text, wake_words, normalize_text)
-                    if wake_command is None:
-                        print("[WAKE] Ignored speech without wake word.")
+                    if speaking_now and tts_playing_event.is_set():
+                        print("[TTS] Interrupted by user speech.")
+                        tts_interrupt_event.set()
+
+                    if speaking_now:
+                        if not utterance_active:
+                            speech_chunks = list(pre_speech_buffer)
+                        speech_chunks.append(pcm)
+                        silence_block_count = 0
+                        utterance_active = True
                         continue
-                    event_in.put(wake_command)
+
+                    if utterance_active:
+                        speech_chunks.append(pcm)
+                        silence_block_count += 1
+
+                        if silence_block_count < silence_blocks_to_end:
+                            continue
+
+                        audio = np.concatenate(speech_chunks)
+                        speech_chunks = []
+                        silence_block_count = 0
+                        utterance_active = False
+                        pre_speech_buffer.clear()
+
+                        if len(audio) < min_speech_samples:
+                            continue
+
+                        text = transcribe_audio(local_asr_model, audio, hotwords=hotwords)
+                        if text:
+                            print(f"[ASR HEARD]: {text}")
+                            wake_command = extract_wake_command(text, wake_words, normalize_text)
+                            if wake_command is None:
+                                now = time.monotonic()
+                                if now < wake_followup_until:
+                                    print("[WAKE] Accepted follow-up command without wake word.")
+                                    wake_followup_until = now + wake_followup_seconds
+                                    event_in.put(normalize_text(text))
+                                    continue
+                                print("[WAKE] Ignored speech without wake word.")
+                                continue
+                            wake_followup_until = time.monotonic() + wake_followup_seconds
+                            event_in.put(wake_command)
+        except Exception as e:
+            print(f"[ASR ERROR]: microphone listener crashed, restarting: {e}")
+            time.sleep(0.5)

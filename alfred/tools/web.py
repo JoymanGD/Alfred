@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.parse import quote_plus, unquote
+from xml.etree import ElementTree
 
 from alfred.tooling import Tool, ToolContext, ToolResult
 
@@ -374,7 +375,40 @@ class WebTool(Tool):
         return any(pattern in lowered for pattern in patterns)
 
     def _search_web(self, context: ToolContext, query: str, region: str = "wt-wt") -> list[dict[str, Any]]:
-        html = context.fetch_url(f"https://html.duckduckgo.com/html/?kl={quote_plus(region)}&q={quote_plus(query)}")
+        endpoints = [
+            f"https://html.duckduckgo.com/html/?kl={quote_plus(region)}&q={quote_plus(query)}",
+            f"https://lite.duckduckgo.com/lite/?kl={quote_plus(region)}&q={quote_plus(query)}",
+        ]
+        last_error = None
+        for endpoint in endpoints:
+            try:
+                html = context.fetch_url(endpoint)
+                results = self._parse_duckduckgo_results(context, html)
+                if results:
+                    return results
+            except Exception as e:
+                last_error = e
+                print(f"[WEB] Search endpoint failed: {endpoint} -> {e}")
+
+        try:
+            bing_results = self._search_bing_rss(context, query, region=region)
+            if bing_results:
+                return bing_results
+        except Exception as e:
+            last_error = e
+            print(f"[WEB] Bing RSS search failed for {query}: {e}")
+
+        if last_error is not None:
+            raise last_error
+        return []
+
+    def _parse_duckduckgo_results(self, context: ToolContext, html: str) -> list[dict[str, Any]]:
+        results = self._parse_duckduckgo_html_results(context, html)
+        if results:
+            return results
+        return self._parse_duckduckgo_lite_results(context, html)
+
+    def _parse_duckduckgo_html_results(self, context: ToolContext, html: str) -> list[dict[str, Any]]:
         blocks = re.findall(
             r'(<div[^>]*class="result[^"]*"[^>]*>.*?</div>\s*</div>)',
             html,
@@ -408,6 +442,43 @@ class WebTool(Tool):
 
             if title and resolved_url:
                 results.append({"title": title, "url": resolved_url, "snippet": snippet})
+        return results
+
+    def _parse_duckduckgo_lite_results(self, context: ToolContext, html: str) -> list[dict[str, Any]]:
+        links = re.findall(
+            r'<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        results = []
+        for href, title_html in links:
+            title = strip_html(title_html, context.normalize_memory_text)
+            url_match = re.search(r"uddg=([^&]+)", href)
+            resolved_url = unquote(url_match.group(1)) if url_match else href
+            if not title or not resolved_url:
+                continue
+            results.append({"title": title, "url": resolved_url, "snippet": ""})
+            if len(results) >= 5:
+                break
+        return results
+
+    def _search_bing_rss(self, context: ToolContext, query: str, region: str = "wt-wt") -> list[dict[str, Any]]:
+        setlang = "ru" if region.startswith("ru") else "en"
+        xml_text = context.fetch_url(
+            f"https://www.bing.com/search?format=rss&setlang={quote_plus(setlang)}&q={quote_plus(query)}"
+        )
+        root = ElementTree.fromstring(xml_text)
+        results = []
+        for item in root.findall("./channel/item"):
+            title = context.normalize_memory_text(item.findtext("title", default=""))
+            url = context.normalize_memory_text(item.findtext("link", default=""))
+            snippet = context.normalize_memory_text(item.findtext("description", default=""))
+            if not title or not url:
+                continue
+            results.append({"title": title, "url": url, "snippet": snippet})
+            if len(results) >= 5:
+                break
         return results
 
     def _search_web_multi(self, context: ToolContext, queries: list[str]) -> list[dict[str, Any]]:

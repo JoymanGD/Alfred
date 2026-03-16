@@ -23,6 +23,7 @@ def _get_env_bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class AppConfig:
     base_dir: str
+    codex_exe: str
     ollama_model: str
     ollama_exe: str
     whisper_model: str
@@ -30,6 +31,9 @@ class AppConfig:
     max_history_messages: int
     min_speech_seconds: float
     end_silence_seconds: float
+    pre_speech_seconds: float
+    wake_followup_seconds: float
+    tts_gain: float
     piper_voices_dir: str
     image_model_id: str
     image_torch_dtype: str
@@ -60,6 +64,7 @@ def load_config(base_dir: str) -> AppConfig:
     ]
     return AppConfig(
         base_dir=base_dir,
+        codex_exe=os.getenv("ALFRED_CODEX_EXE", "codex"),
         ollama_model=_get_env("ALFRED_OLLAMA_MODEL", "deepseek-r1:14b"),
         ollama_exe=os.getenv(
             "ALFRED_OLLAMA_EXE",
@@ -70,6 +75,9 @@ def load_config(base_dir: str) -> AppConfig:
         max_history_messages=int(os.getenv("ALFRED_MAX_HISTORY_MESSAGES", "12")),
         min_speech_seconds=float(os.getenv("ALFRED_MIN_SPEECH_SECONDS", "0.7")),
         end_silence_seconds=float(os.getenv("ALFRED_END_SILENCE_SECONDS", "1.35")),
+        pre_speech_seconds=float(os.getenv("ALFRED_PRE_SPEECH_SECONDS", "0.45")),
+        wake_followup_seconds=float(os.getenv("ALFRED_WAKE_FOLLOWUP_SECONDS", "8.0")),
+        tts_gain=float(os.getenv("ALFRED_TTS_GAIN", "2.4")),
         piper_voices_dir=os.getenv("ALFRED_PIPER_VOICES_DIR", os.path.join(base_dir, "piper-voices")),
         image_model_id=_get_env("ALFRED_IMAGE_MODEL_ID", "Tongyi-MAI/Z-Image-Turbo"),
         image_torch_dtype=_get_env("ALFRED_IMAGE_TORCH_DTYPE", "bfloat16"),

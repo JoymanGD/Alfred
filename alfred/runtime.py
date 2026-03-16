@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import time
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import ollama
@@ -158,18 +159,32 @@ def normalize_memory_text(text: str) -> str:
 
 
 def fetch_url(url: str) -> str:
-    request = Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/132.0.0.0 Safari/537.36"
-            )
-        },
-    )
-    with urlopen(request, timeout=10) as response:
-        return response.read().decode("utf-8", errors="replace")
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/132.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ru,en-US;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Connection": "close",
+    }
+    last_error = None
+    for attempt in range(3):
+        request = Request(url, headers=headers)
+        try:
+            with urlopen(request, timeout=10 + attempt * 5) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            print(f"[NET] fetch_url attempt {attempt + 1} failed for {url}: {exc}")
+            time.sleep(0.6 * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Failed to fetch URL: {url}")
 
 
 def fetch_json(url: str, method: str = "GET", payload=None, headers=None, timeout: float = 3):

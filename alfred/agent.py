@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 
 from alfred.router import analyze_request
 from alfred.tooling import ToolContext, ToolRegistry
+from alfred.tools.codex import CodexTool, CodexToolConfig
 from alfred.tools.image import ImageTool
 from alfred.tools.music import MusicTool, MusicToolConfig
 from alfred.tools.system import SystemTool, SystemToolConfig
@@ -11,6 +12,8 @@ from alfred.tools.web import WebTool, WebToolConfig
 
 @dataclass
 class AgentConfig:
+    base_dir: str
+    codex_exe: str
     system_prompt: str
     ru_weather_words: list[str]
     ru_search_words: list[str]
@@ -54,6 +57,12 @@ def build_tool_registry(config: AgentConfig) -> ToolRegistry:
                 ru_fact_words=config.ru_fact_words,
             )
         ),
+        CodexTool(
+            CodexToolConfig(
+                codex_exe=config.codex_exe,
+                project_dir=config.base_dir,
+            )
+        ),
         ImageTool(),
         MusicTool(MusicToolConfig()),
     )
@@ -95,6 +104,7 @@ def agent_loop(
             fetch_url=fetch_url,
             fetch_json=fetch_json,
             generate_image=generate_image_payload,
+            event_out_queue=event_out,
         )
         route_decision = analyze_request(tool_context, user_text, tool_registry)
         routed_context = replace(
@@ -106,13 +116,17 @@ def agent_loop(
         )
 
         routed_tool = tool_registry.get_tool(route_decision.tool_name) if route_decision.tool_name else None
-        if routed_tool is not None and route_decision.intent != "chat":
+        if routed_tool is not None:
+            print(
+                f"[ROUTER] Dispatching routed tool: {route_decision.tool_name} "
+                f"for intent={route_decision.intent}"
+            )
             tool_result = routed_tool.handle(routed_context, user_text)
         else:
-            matched_tool = tool_registry.first_matching_tool(tool_context, user_text)
+            matched_tool = tool_registry.first_matching_tool(routed_context, user_text)
             if matched_tool is not None:
-                print(f"[ROUTER] Fast-path tool match: {matched_tool.name} for: {user_text}")
-                tool_result = matched_tool.handle(tool_context, user_text)
+                print(f"[ROUTER] Fallback tool match: {matched_tool.name} for: {user_text}")
+                tool_result = matched_tool.handle(routed_context, user_text)
             else:
                 tool_result = None
         if tool_result is not None and tool_result.handled:

@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from alfred.tooling import ToolContext, ToolRegistry
 
@@ -10,7 +11,7 @@ class RouteDecision:
     intent: str = "chat"
     tool_name: str | None = None
     normalized_query: str | None = None
-    args: dict[str, str] = field(default_factory=dict)
+    args: dict[str, Any] = field(default_factory=dict)
 
 
 def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry) -> RouteDecision:
@@ -21,6 +22,7 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         "current_events",
         "browser_open",
         "system_open",
+        "codex_request",
         "music_play",
         "music_control",
         "image",
@@ -36,21 +38,54 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         "- fact: factual lookup about a person, company, place, event, or thing.\n"
         "- current_events: news, recent developments, live situations, updates.\n"
         "- browser_open: open something in a browser, especially search or a page.\n"
-        "- system_open: open an app, file, folder, or website directly.\n"
+        "- system_open: open an app, file, folder, or website directly, or control the assistant itself.\n"
+        "- codex_request: send a development task to Codex CLI for the current project.\n"
         "- music_play: play a song, artist, playlist, genre, or mood music.\n"
-        "- music_control: next, pause, resume, louder, quieter, mute, previous.\n"
+        "- music_control: next, pause, resume, louder, quieter, mute, previous, unmute, full volume, volume status, or explain why Alfred is hard to hear.\n"
         "- If the user asks to play or turn on music, a song, an artist, a playlist, a genre, or mood music, use music_play even if they also mention the browser.\n"
         "- If the user asks to open news, search results, articles, or information in the browser, use browser_open.\n"
         "- Use browser_open only when the main goal is to open a page or search results in the browser.\n"
         "- image: generate an image.\n"
         "- chat: ordinary conversation.\n"
+        "- For music_control, set args.action to one of: next, previous, pause, resume, volume_up, volume_down, mute, unmute, volume_status, volume_diagnose.\n"
+        "- For music_control volume requests, also fill at most one of these optional fields when applicable:\n"
+        "  delta_percent: numeric percent change such as 10 or 50.\n"
+        "  factor: numeric multiplier such as 0.5 for twice quieter or 2.0 for twice louder.\n"
+        "  qualifier: one of slight, medium, strong, max.\n"
+        "- For music_control, do not leave args.action empty.\n"
+        "Examples for music_control:\n"
+        '- "mute" -> {"intent":"music_control","normalized_query":"","args":{"action":"mute"}}\n'
+        '- "unmute" -> {"intent":"music_control","normalized_query":"","args":{"action":"unmute"}}\n'
+        '- "turn the volume up by 10 percent" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_up","delta_percent":"10"}}\n'
+        '- "make it twice quieter" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_down","factor":"0.5"}}\n'
+        '- "сделай тише в два раза" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_down","factor":"0.5"}}\n'
+        '- "сделай громче в два раза" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_up","factor":"2.0"}}\n'
+        '- "включи звук" -> {"intent":"music_control","normalized_query":"","args":{"action":"unmute"}}\n'
+        '- "убери звук" -> {"intent":"music_control","normalized_query":"","args":{"action":"mute"}}\n'
+        '- "на полную громкость" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_up","qualifier":"max"}}\n'
+        '- "какая сейчас громкость" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_status"}}\n'
+        '- "what is the current volume" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_status"}}\n'
+        '- "why is Alfred so hard to hear" -> {"intent":"music_control","normalized_query":"","args":{"action":"volume_diagnose"}}\n'
+        '- "restart Alfred" -> {"intent":"system_open","normalized_query":"","args":{"action":"restart_assistant"}}\n'
+        '- "перезапусти Альфреда" -> {"intent":"system_open","normalized_query":"","args":{"action":"restart_assistant"}}\n'
+        '- "turn off Alfred" -> {"intent":"system_open","normalized_query":"","args":{"action":"shutdown_assistant"}}\n'
+        '- "выключи Альфреда" -> {"intent":"system_open","normalized_query":"","args":{"action":"shutdown_assistant"}}\n'
+        '- "shutdown the computer" -> {"intent":"system_open","normalized_query":"","args":{"action":"shutdown_computer"}}\n'
+        '- "turn off my PC" -> {"intent":"system_open","normalized_query":"","args":{"action":"shutdown_computer"}}\n'
+        '- "restart the computer" -> {"intent":"system_open","normalized_query":"","args":{"action":"restart_computer"}}\n'
+        '- "reboot my PC" -> {"intent":"system_open","normalized_query":"","args":{"action":"restart_computer"}}\n'
+        '- "выключи компьютер" -> {"intent":"system_open","normalized_query":"","args":{"action":"shutdown_computer"}}\n'
+        '- "ask codex to add a shutdown computer command" -> {"intent":"codex_request","normalized_query":"add a shutdown computer command","args":{}}\n'
+        '- "ask codex to fix the router" -> {"intent":"codex_request","normalized_query":"fix the router","args":{}}\n'
         "Return JSON with this schema:\n"
-        '{"intent":"...", "normalized_query":"...", "args":{"location":"","time":"","site":""}}\n'
+        '{"intent":"...", "normalized_query":"...", "args":{"location":"","time":"","site":"","action":"","delta_percent":"","factor":"","qualifier":""}}\n'
         "Use normalized_query to rewrite the request into the best input for the chosen tool.\n"
         "For browser_open, normalized_query should be the clean browser search phrase.\n"
         "For web_search, fact, and current_events, normalized_query should be the clean web search phrase.\n"
         "For music_play, normalized_query should be the clean music search phrase.\n"
+        "For music_control, normalized_query should usually be empty.\n"
         "For system_open, normalized_query should be the app or target to open.\n"
+        "For codex_request, normalized_query should be the clean software task for Codex.\n"
         "If no rewritten query is needed, normalized_query can be an empty string.\n\n"
         f"User message: {text}"
     )
@@ -75,7 +110,7 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         decision = _postprocess_route_decision(text, decision)
         print(
             f"[ROUTER] LLM route decision: intent={decision.intent}, tool={decision.tool_name}, "
-            f"query={decision.normalized_query!r} for: {text}"
+            f"query={decision.normalized_query!r}, args={decision.args} for: {text}"
         )
         if decision.intent in labels:
             return decision
@@ -87,6 +122,48 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
 
 def _postprocess_route_decision(text: str, decision: RouteDecision) -> RouteDecision:
     lowered = text.lower()
+    hearing_issue_patterns = [
+        r"\bwhy\s+is\s+alfred\s+so\s+hard\s+to\s+hear\b",
+        r"\balfred\b.*\b(?:hard|quiet|low)\b.*\b(?:hear|hearing)\b",
+        r"\b(?:can(?:not|'t)\s+hear|hard\s+to\s+hear)\b.*\balfred\b",
+    ]
+    if any(re.search(pattern, lowered) for pattern in hearing_issue_patterns):
+        return RouteDecision(
+            intent="music_control",
+            tool_name="music",
+            normalized_query=None,
+            args={"action": "volume_diagnose"},
+        )
+
+    shutdown_computer_patterns = [
+        r"\bshutdown\b.*\b(?:computer|pc|laptop)\b",
+        r"\bturn\s+off\b.*\b(?:computer|pc|laptop)\b",
+        r"\bpower\s+off\b.*\b(?:computer|pc|laptop)\b",
+        r"\bвыключи\b.*\b(?:компьютер|пк|ноутбук)\b",
+    ]
+    if any(re.search(pattern, lowered) for pattern in shutdown_computer_patterns):
+        return RouteDecision(
+            intent="system_open",
+            tool_name="system",
+            normalized_query=None,
+            args={"action": "shutdown_computer"},
+        )
+
+    restart_computer_patterns = [
+        r"\brestart\b.*\b(?:computer|pc|laptop)\b",
+        r"\breboot\b.*\b(?:computer|pc|laptop)\b",
+        r"\brestart\s+my\s+(?:computer|pc|laptop)\b",
+        r"\breboot\s+my\s+(?:computer|pc|laptop)\b",
+        r"\bРїРµСЂРµР·Р°РіСЂСѓР·Рё\b.*\b(?:РєРѕРјРїСЊСЋС‚РµСЂ|РїРє|РЅРѕСѓС‚Р±СѓРє)\b",
+    ]
+    if any(re.search(pattern, lowered) for pattern in restart_computer_patterns):
+        return RouteDecision(
+            intent="system_open",
+            tool_name="system",
+            normalized_query=None,
+            args={"action": "restart_computer"},
+        )
+
     browser_open_patterns = [
         r"\bopen\b",
         r"\blaunch\b",
@@ -115,7 +192,7 @@ def _postprocess_route_decision(text: str, decision: RouteDecision) -> RouteDeci
         "rock",
         "pop",
         "lofi",
-        "музы",
+        "музык",
         "песн",
         "плейлист",
         "трек",
@@ -146,7 +223,37 @@ def _postprocess_route_decision(text: str, decision: RouteDecision) -> RouteDeci
                 args=decision.args,
             )
 
+    codex_terms = ["codex", "кодекс", "кодекса", "кодексу"]
+    codex_request_patterns = [
+        r"\bask\s+codex\b",
+        r"\btell\s+codex\b",
+        r"\brequest\s+codex\b",
+        r"\bпопроси\b",
+        r"\bспроси\b",
+        r"\bзапроси\b",
+    ]
+    if any(term in lowered for term in codex_terms) and any(re.search(pattern, lowered) for pattern in codex_request_patterns):
+        normalized_query = decision.normalized_query or _extract_codex_query(text)
+        return RouteDecision(
+            intent="codex_request",
+            tool_name="codex",
+            normalized_query=normalized_query,
+            args=decision.args,
+        )
+
     return decision
+
+
+def _extract_codex_query(text: str) -> str | None:
+    patterns = [
+        r"^(?:ask|tell|request)\s+(?:codex)\s+to\s+(.+)$",
+        r"^(?:попроси|спроси|запроси)\s+(?:у\s+)?(?:кодекса|кодексу|кодекс)\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" ?!.,")
+    return None
 
 
 def _parse_router_json(raw: str) -> dict:
@@ -167,6 +274,7 @@ def map_intent_to_tool_name(intent: str) -> str | None:
         "current_events": "web",
         "browser_open": "system",
         "system_open": "system",
+        "codex_request": "codex",
         "music_play": "music",
         "music_control": "music",
         "image": "image",

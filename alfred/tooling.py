@@ -13,6 +13,7 @@ class ToolContext:
     fetch_url: Callable[[str], str]
     fetch_json: Callable[..., dict[str, Any]]
     generate_image: Callable[[str], Any] | None = None
+    event_out_queue: Any = None
     routed_intent: str | None = None
     routed_tool_name: str | None = None
     routed_query: str | None = None

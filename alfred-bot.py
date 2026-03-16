@@ -41,11 +41,13 @@ conversation_memory = ConversationMemory(config.max_history_messages, normalize_
 tts_backend = create_tts_backend(
     TTSConfig(piper_voices_dir=config.piper_voices_dir)
 )
-audio_engine = AudioEngine(tts_backend, detect_language)
+audio_engine = AudioEngine(tts_backend, detect_language, config.tts_gain)
 tts_languages = ", ".join(tts_backend.supported_languages())
 
 
 agent_config = AgentConfig(
+    base_dir=config.base_dir,
+    codex_exe=config.codex_exe,
     system_prompt=config.system_prompt,
     ru_weather_words=config.ru_weather_words,
     ru_search_words=config.ru_search_words,
@@ -70,6 +72,7 @@ def start():
     print(f"[ASR] Whisper config: model={config.whisper_model}, compute_type={config.whisper_compute_type}")
     print(f"[TTS] Backend: Piper (voices dir: {config.piper_voices_dir})")
     print(f"[TTS] Supported languages: {tts_languages}")
+    print(f"[TTS] Gain: {config.tts_gain:.2f}x")
     if config.image_device.startswith("cuda"):
         print(
             "[CUDA] SDP backends: "
@@ -110,6 +113,8 @@ def start():
             services.get_asr_model,
             config.min_speech_seconds,
             config.end_silence_seconds,
+            config.pre_speech_seconds,
+            config.wake_followup_seconds,
             tts_playing_event,
             tts_interrupt_event,
             config.wake_words,

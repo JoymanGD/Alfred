@@ -2,7 +2,10 @@ import difflib
 import os
 import re
 import subprocess
+import threading
+import time
 import webbrowser
+import ctypes
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -32,6 +35,25 @@ class SystemTool(Tool):
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.detect_language(text)
+        routed_action = (context.routed_args or {}).get("action") if context.routed_args else None
+        if routed_action == "restart_assistant":
+            self._schedule_alfred_restart()
+            reply_text = "Перезапускаю Альфреда." if language == "ru" else "Restarting Alfred."
+            return ToolResult(handled=True, reply_text=reply_text)
+        if routed_action == "shutdown_assistant":
+            self._schedule_alfred_shutdown()
+            reply_text = "Выключаю Альфреда." if language == "ru" else "Shutting Alfred down."
+            return ToolResult(handled=True, reply_text=reply_text)
+        if routed_action == "shutdown_computer":
+            self._schedule_computer_shutdown()
+            reply_text = "Выключаю компьютер." if language == "ru" else "Shutting the computer down."
+            return ToolResult(handled=True, reply_text=reply_text)
+
+        if routed_action == "restart_computer":
+            self._schedule_computer_restart()
+            reply_text = "РџРµСЂРµР·Р°РіСЂСѓР¶Р°СЋ РєРѕРјРїСЊСЋС‚РµСЂ." if language == "ru" else "Restarting the computer."
+            return ToolResult(handled=True, reply_text=reply_text)
+
         browser_query = (
             context.routed_query
             if context.routed_intent == "browser_open" and context.routed_query
@@ -56,6 +78,11 @@ class SystemTool(Tool):
             return ToolResult(handled=True, reply_text=reply_text)
 
         try:
+            if routed_action == "close_application":
+                closed = self._close_target(target)
+                reply_text = self._build_close_reply(language, target, closed)
+                return ToolResult(handled=True, reply_text=reply_text, target=closed or target)
+
             opened = self._open_target(target)
             reply_text = self._build_reply(language, target, opened)
         except Exception as e:
@@ -181,6 +208,67 @@ class SystemTool(Tool):
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             return resolved
+
+    def _close_target(self, target: str) -> str | None:
+        resolved = self._resolve_target(target)
+        candidates = self._build_process_name_candidates(target, resolved)
+        for process_name in candidates:
+            result = subprocess.run(
+                ["taskkill", "/IM", process_name, "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                check=False,
+            )
+            if result.returncode == 0:
+                return process_name
+
+        visible_name = self._extract_process_basename(resolved) or target.strip()
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                (
+                    "$target = "
+                    + repr(target)
+                    + "; "
+                    + "$name = "
+                    + repr(visible_name)
+                    + "; "
+                    + "Get-Process | Where-Object { "
+                    + "$_.MainWindowTitle -like ('*' + $target + '*') -or "
+                    + "$_.ProcessName -like ('*' + $name + '*') "
+                    + "} | Stop-Process -Force"
+                ),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            check=False,
+        )
+        if result.returncode == 0:
+            return visible_name
+        return None
+
+    def _build_process_name_candidates(self, target: str, resolved: str) -> list[str]:
+        candidates: list[str] = []
+        for value in (resolved, target):
+            process_name = self._extract_process_basename(value)
+            if process_name and process_name not in candidates:
+                candidates.append(process_name)
+        return candidates
+
+    def _extract_process_basename(self, value: str) -> str | None:
+        if not value:
+            return None
+        cleaned = value.strip().strip("\"'")
+        base_name = os.path.basename(cleaned)
+        if not base_name:
+            return None
+        if "." not in base_name:
+            base_name = f"{base_name}.exe"
+        return base_name
 
     def _find_steam_game_target(self, target: str) -> str | None:
         normalized_target = self._normalize_match_key(target)
@@ -362,3 +450,85 @@ class SystemTool(Tool):
         if language == "ru":
             return f"Открываю {target}."
         return f"Opening {target}."
+
+    def _build_close_reply(self, language: str, target: str, closed: str | None) -> str:
+        if closed:
+            if language == "ru":
+                return f"Р—Р°РєСЂС‹РІР°СЋ {target}."
+            return f"Closing {target}."
+        if language == "ru":
+            return f"РќРµ РЅР°С€РµР» Р·Р°РїСѓС‰РµРЅРЅРѕРµ РїСЂРёР»РѕР¶РµРЅРёРµ {target}."
+        return f"I could not find a running app matching {target}."
+
+    def _schedule_alfred_restart(self):
+        root_dir = Path(__file__).resolve().parents[2]
+        run_script = root_dir / "run_alfred.bat"
+        if not run_script.exists():
+            raise FileNotFoundError(f"run_alfred.bat not found at {run_script}")
+
+        def delayed_restart():
+            time.sleep(1.0)
+            subprocess.Popen(
+                ["cmd", "/c", "start", "", str(run_script)],
+                cwd=str(root_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            self._request_console_close()
+            os._exit(0)
+
+        threading.Thread(target=delayed_restart, daemon=True).start()
+
+    def _schedule_alfred_shutdown(self):
+        def delayed_shutdown():
+            time.sleep(1.0)
+            self._request_console_close()
+            os._exit(0)
+
+        threading.Thread(target=delayed_shutdown, daemon=True).start()
+
+    def _schedule_computer_shutdown(self):
+        def delayed_shutdown():
+            time.sleep(1.0)
+            subprocess.Popen(
+                ["shutdown", "/s", "/t", "0"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+
+        threading.Thread(target=delayed_shutdown, daemon=True).start()
+
+    def _schedule_computer_restart(self):
+        def delayed_restart():
+            time.sleep(1.0)
+            subprocess.Popen(
+                ["shutdown", "/r", "/t", "0"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+
+        threading.Thread(target=delayed_restart, daemon=True).start()
+
+    def _request_console_close(self):
+        try:
+            console_window = ctypes.windll.kernel32.GetConsoleWindow()
+            if console_window:
+                ctypes.windll.user32.PostMessageW(console_window, 0x0010, 0, 0)
+        except Exception:
+            pass
+
+    def _build_close_reply(self, language: str, target: str, closed: str | None) -> str:
+        if closed:
+            if language == "ru":
+                return f"\u0417\u0430\u043a\u0440\u044b\u0432\u0430\u044e {target}."
+            return f"Closing {target}."
+        if language == "ru":
+            return (
+                f"\u041d\u0435 \u043d\u0430\u0448\u0435\u043b "
+                f"\u0437\u0430\u043f\u0443\u0449\u0435\u043d\u043d\u043e\u0435 "
+                f"\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 {target}."
+            )
+        return f"I could not find a running app matching {target}."
