@@ -33,6 +33,17 @@ KNOCK_PHRASES = [
     "knock knock alfred",
     "\u0442\u0443\u043a \u0442\u0443\u043a \u0430\u043b\u044c\u0444\u0440\u0435\u0434",
 ]
+KNOCK_HOTWORDS = [
+    "knock knock alfred",
+    "knock knock",
+    "alfred",
+    "\u0442\u0443\u043a \u0442\u0443\u043a \u0430\u043b\u044c\u0444\u0440\u0435\u0434",
+    "\u0442\u0443\u043a-\u0442\u0443\u043a \u0430\u043b\u044c\u0444\u0440\u0435\u0434",
+    "\u0442\u0443\u043a \u0442\u0443\u043a",
+    "\u0430\u043b\u044c\u0444\u0440\u0435\u0434",
+    "\u0430\u043b\u0444\u0440\u0435\u0434",
+]
+HOTWORDS_TEXT = ",".join(dict.fromkeys(KNOCK_HOTWORDS))
 CONFUSABLE_MAP = str.maketrans(
     {
         "a": "а",
@@ -68,6 +79,59 @@ def normalize_phrase(text: str) -> str:
 KNOCK_NORMALIZED = {normalize_phrase(phrase) for phrase in KNOCK_PHRASES}
 
 
+def _dedupe_repeated_words(words: list[str]) -> list[str]:
+    deduped: list[str] = []
+    repeatable_limits = {
+        "тук": 2,
+        "knock": 2,
+        "альфред": 1,
+        "алфред": 1,
+        "alfred": 1,
+    }
+    for word in words:
+        limit = repeatable_limits.get(word)
+        if limit is None:
+            deduped.append(word)
+            continue
+        trailing_same = 0
+        for existing in reversed(deduped):
+            if existing != word:
+                break
+            trailing_same += 1
+        if trailing_same >= limit:
+            continue
+        deduped.append(word)
+    return deduped
+
+
+def _extract_best_knock_window(words: list[str]) -> list[str]:
+    best_window: list[str] = words
+    best_score = -1.0
+    max_window = min(len(words), 6)
+    for window_size in range(1, max_window + 1):
+        for start in range(0, len(words) - window_size + 1):
+            window = words[start : start + window_size]
+            normalized = " ".join(window)
+            score = max(
+                difflib.SequenceMatcher(a=normalized, b=phrase).ratio()
+                for phrase in KNOCK_NORMALIZED
+            )
+            if score > best_score:
+                best_score = score
+                best_window = window
+    return best_window
+
+
+def sanitize_recognized_text(text: str) -> str:
+    words = normalize_phrase(text).split()
+    if not words:
+        return ""
+    words = _dedupe_repeated_words(words)
+    if len(words) > 6:
+        words = _extract_best_knock_window(words)
+    return " ".join(words)
+
+
 def write_log(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with LOG_FILE.open("a", encoding="utf-8") as fh:
@@ -91,7 +155,7 @@ def release_lock() -> None:
 
 
 def is_knock_phrase(text: str) -> bool:
-    normalized = normalize_phrase(text)
+    normalized = sanitize_recognized_text(text)
     if not normalized:
         return False
     if normalized in KNOCK_NORMALIZED:
@@ -168,14 +232,15 @@ def transcribe_audio(asr_model: WhisperModel, audio: np.ndarray) -> tuple[str, l
         "condition_on_previous_text": False,
         "suppress_tokens": [-1],
         "vad_filter": False,
-        "hotwords": "Alfred,alfred,\u0430\u043b\u044c\u0444\u0440\u0435\u0434,\u0442\u0443\u043a \u0442\u0443\u043a,knock knock",
+        "hotwords": HOTWORDS_TEXT,
     }
     candidates: list[str] = []
     for language in (None, "en", "ru"):
         segments, _ = asr_model.transcribe(audio, language=language, **common_kwargs)
         text = "".join(segment.text for segment in segments).strip()
-        if text:
-            candidates.append(text)
+        cleaned = sanitize_recognized_text(text)
+        if cleaned:
+            candidates.append(cleaned)
     if not candidates:
         return "", []
     exact = next((text for text in candidates if is_knock_phrase(text)), None)
@@ -257,6 +322,7 @@ def main() -> None:
     LOG_FILE.write_text("", encoding="utf-8")
     write_log("Listener starting.")
     write_log(f"Accepted phrases: {', '.join(KNOCK_PHRASES)}")
+    write_log(f"Hotwords: {HOTWORDS_TEXT}")
 
     acquire_lock()
     try:
