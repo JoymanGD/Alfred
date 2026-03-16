@@ -1,0 +1,3 @@
+[submodule "piper-voices"]
+	path = piper-voices
+	url = https://huggingface.co/rhasspy/piper-voices
