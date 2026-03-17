@@ -2,6 +2,10 @@
 setlocal
 cd /d "%~dp0"
 
+> "%~dp0alfred_knock_listener.log" (
+  rem Reset listener log on every launch.
+)
+
 set "PYW=%LocalAppData%\Programs\Python\Python311\pythonw.exe"
 if exist "%PYW%" (
   powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ^

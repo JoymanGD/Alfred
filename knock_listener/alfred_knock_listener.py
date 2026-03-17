@@ -28,6 +28,28 @@ VAD_THRESHOLD = 0.35
 WHISPER_MODEL = os.getenv("ALFRED_KNOCK_WHISPER_MODEL", "tiny").strip() or "tiny"
 WHISPER_DEVICE = os.getenv("ALFRED_KNOCK_WHISPER_DEVICE", "cpu").strip() or "cpu"
 WHISPER_COMPUTE_TYPE = os.getenv("ALFRED_KNOCK_WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
+USE_HOTWORDS = os.getenv("ALFRED_KNOCK_USE_HOTWORDS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+FUZZY_MATCH_THRESHOLD = max(
+    0.0,
+    min(1.0, float(os.getenv("ALFRED_KNOCK_MATCH_THRESHOLD", "0.72").strip() or "0.72")),
+)
+REQUIRED_MATCHING_CANDIDATES = max(
+    1,
+    int(os.getenv("ALFRED_KNOCK_REQUIRED_MATCHES", "1").strip() or "1"),
+)
+WAKE_PREFIX_THRESHOLD = max(
+    0.0,
+    min(1.0, float(os.getenv("ALFRED_KNOCK_PREFIX_THRESHOLD", "0.68").strip() or "0.68")),
+)
+NAME_THRESHOLD = max(
+    0.0,
+    min(1.0, float(os.getenv("ALFRED_KNOCK_NAME_THRESHOLD", "0.66").strip() or "0.66")),
+)
 
 KNOCK_PHRASES = [
     "knock knock alfred",
@@ -44,49 +66,153 @@ KNOCK_HOTWORDS = [
     "\u0430\u043b\u0444\u0440\u0435\u0434",
 ]
 HOTWORDS_TEXT = ",".join(dict.fromkeys(KNOCK_HOTWORDS))
-CONFUSABLE_MAP = str.maketrans(
+CANONICAL_CHAR_MAP = str.maketrans(
     {
-        "a": "а",
-        "c": "с",
-        "e": "е",
-        "k": "к",
-        "m": "м",
-        "o": "о",
-        "p": "р",
-        "t": "т",
-        "x": "х",
-        "y": "у",
-        "а": "а",
-        "с": "с",
-        "е": "е",
-        "к": "к",
-        "м": "м",
-        "о": "о",
-        "р": "р",
-        "т": "т",
-        "х": "х",
-        "у": "у",
+        "a": "a",
+        "b": "b",
+        "c": "c",
+        "d": "d",
+        "e": "e",
+        "f": "f",
+        "g": "g",
+        "h": "h",
+        "i": "i",
+        "k": "k",
+        "l": "l",
+        "m": "m",
+        "n": "n",
+        "o": "o",
+        "p": "p",
+        "r": "r",
+        "s": "s",
+        "t": "t",
+        "u": "u",
+        "v": "v",
+        "x": "x",
+        "y": "y",
+        "\u0430": "a",
+        "\u0431": "b",
+        "\u0432": "v",
+        "\u0433": "g",
+        "\u0434": "d",
+        "\u0435": "e",
+        "\u0451": "e",
+        "\u0436": "zh",
+        "\u0437": "z",
+        "\u0438": "i",
+        "\u0439": "i",
+        "\u043a": "k",
+        "\u043b": "l",
+        "\u043c": "m",
+        "\u043d": "n",
+        "\u043e": "o",
+        "\u043f": "p",
+        "\u0440": "r",
+        "\u0441": "s",
+        "\u0442": "t",
+        "\u0443": "u",
+        "\u0444": "f",
+        "\u0445": "h",
+        "\u0446": "c",
+        "\u0447": "ch",
+        "\u0448": "sh",
+        "\u0449": "sh",
+        "\u044b": "y",
+        "\u044d": "e",
+        "\u044e": "u",
+        "\u044f": "ya",
+        "\u044c": "",
+        "\u044a": "",
+        "\u0456": "i",
+        "\u0457": "i",
+        "\u0491": "g",
     }
 )
 
 
 def normalize_phrase(text: str) -> str:
-    lowered = text.lower().replace("ё", "е").translate(CONFUSABLE_MAP)
-    tokens = re.findall(r"[a-z0-9а-я]+", lowered)
+    lowered = text.lower().translate(CANONICAL_CHAR_MAP)
+    tokens = re.findall(r"[a-z0-9]+", lowered)
     return " ".join(tokens)
 
 
 KNOCK_NORMALIZED = {normalize_phrase(phrase) for phrase in KNOCK_PHRASES}
+WAKE_PREFIXES = {
+    "tuk tuk",
+    "tuktuk",
+    "duk tuk",
+    "duktuk",
+    "dok tuk",
+    "doktuk",
+    "knock knock",
+    "knockknock",
+}
+NAME_VARIANTS = {
+    "alfred",
+    "alfret",
+    "alfres",
+    "alfreto",
+}
+
+
+def candidate_match_score(text: str) -> float:
+    normalized = sanitize_recognized_text(text)
+    if not normalized:
+        return 0.0
+    return max(
+        difflib.SequenceMatcher(a=normalized, b=phrase).ratio()
+        for phrase in KNOCK_NORMALIZED
+    )
+
+
+def _best_similarity(text: str, variants: set[str]) -> float:
+    if not text:
+        return 0.0
+    return max(difflib.SequenceMatcher(a=text, b=variant).ratio() for variant in variants)
+
+
+def wake_match_details(text: str) -> tuple[bool, float, float, float]:
+    normalized = sanitize_recognized_text(text)
+    if not normalized:
+        return False, 0.0, 0.0, 0.0
+
+    overall_score = candidate_match_score(normalized)
+    words = normalized.split()
+    joined = "".join(words)
+
+    prefix_candidates = {
+        " ".join(words[:2]),
+        "".join(words[:2]),
+        words[0],
+        joined[: min(len(joined), 8)],
+    }
+    name_candidates = {
+        words[-1],
+        joined[-min(len(joined), 8) :],
+    }
+    if len(words) >= 3:
+        prefix_candidates.add(" ".join(words[:3]))
+        prefix_candidates.add("".join(words[:3]))
+        name_candidates.add(" ".join(words[1:]))
+
+    prefix_score = max(_best_similarity(candidate, WAKE_PREFIXES) for candidate in prefix_candidates if candidate)
+    name_score = max(_best_similarity(candidate, NAME_VARIANTS) for candidate in name_candidates if candidate)
+
+    exact_match = normalized in KNOCK_NORMALIZED
+    structured_match = prefix_score >= WAKE_PREFIX_THRESHOLD and name_score >= NAME_THRESHOLD
+    fuzzy_match = overall_score >= FUZZY_MATCH_THRESHOLD
+    return exact_match or (structured_match and fuzzy_match), overall_score, prefix_score, name_score
 
 
 def _dedupe_repeated_words(words: list[str]) -> list[str]:
     deduped: list[str] = []
     repeatable_limits = {
-        "тук": 2,
+        "tuk": 2,
         "knock": 2,
-        "альфред": 1,
-        "алфред": 1,
         "alfred": 1,
+        "alfret": 1,
+        "alfres": 1,
+        "alfreto": 1,
     }
     for word in words:
         limit = repeatable_limits.get(word)
@@ -155,12 +281,8 @@ def release_lock() -> None:
 
 
 def is_knock_phrase(text: str) -> bool:
-    normalized = sanitize_recognized_text(text)
-    if not normalized:
-        return False
-    if normalized in KNOCK_NORMALIZED:
-        return True
-    return any(difflib.SequenceMatcher(a=normalized, b=phrase).ratio() >= 0.84 for phrase in KNOCK_NORMALIZED)
+    matched, _, _, _ = wake_match_details(text)
+    return matched
 
 
 def is_alfred_running() -> bool:
@@ -232,8 +354,10 @@ def transcribe_audio(asr_model: WhisperModel, audio: np.ndarray) -> tuple[str, l
         "condition_on_previous_text": False,
         "suppress_tokens": [-1],
         "vad_filter": False,
-        "hotwords": HOTWORDS_TEXT,
     }
+    if USE_HOTWORDS:
+        common_kwargs["hotwords"] = HOTWORDS_TEXT
+
     candidates: list[str] = []
     for language in (None, "en", "ru"):
         segments, _ = asr_model.transcribe(audio, language=language, **common_kwargs)
@@ -243,12 +367,18 @@ def transcribe_audio(asr_model: WhisperModel, audio: np.ndarray) -> tuple[str, l
             candidates.append(cleaned)
     if not candidates:
         return "", []
-    exact = next((text for text in candidates if is_knock_phrase(text)), None)
-    if exact is not None:
-        return exact, candidates
+
+    matching_candidates = [text for text in candidates if is_knock_phrase(text)]
+    if len(matching_candidates) >= REQUIRED_MATCHING_CANDIDATES:
+        exact = next((text for text in matching_candidates if sanitize_recognized_text(text) in KNOCK_NORMALIZED), None)
+        if exact is not None:
+            return exact, candidates
+        best_match = max(matching_candidates, key=candidate_match_score)
+        return best_match, candidates
+
     best = max(
         candidates,
-        key=lambda text: max(difflib.SequenceMatcher(a=normalize_phrase(text), b=phrase).ratio() for phrase in KNOCK_NORMALIZED),
+        key=candidate_match_score,
     )
     return best, candidates
 
@@ -310,8 +440,20 @@ def listen_loop(vad_model, asr_model) -> None:
                 continue
 
             normalized = normalize_phrase(text)
-            write_log(f"Recognized: '{text}' normalized='{normalized}' candidates={candidates}")
-            if is_knock_phrase(text):
+            match_count = sum(1 for candidate in candidates if is_knock_phrase(candidate))
+            matched, score, prefix_score, name_score = wake_match_details(text)
+            write_log(
+                f"Recognized: '{text}' normalized='{normalized}' score={score:.2f} "
+                f"prefix_score={prefix_score:.2f} name_score={name_score:.2f} "
+                f"matching_candidates={match_count}/{len(candidates)} candidates={candidates}"
+            )
+            if matched:
+                if match_count < REQUIRED_MATCHING_CANDIDATES:
+                    write_log(
+                        "Wake phrase rejected: insufficient matching candidates "
+                        f"({match_count} < {REQUIRED_MATCHING_CANDIDATES})."
+                    )
+                    continue
                 start_alfred_if_needed()
 
 
@@ -321,6 +463,11 @@ def main() -> None:
 
     LOG_FILE.write_text("", encoding="utf-8")
     write_log("Listener starting.")
+    write_log(f"Whisper hotwords enabled: {USE_HOTWORDS}")
+    write_log(f"Fuzzy match threshold: {FUZZY_MATCH_THRESHOLD:.2f}")
+    write_log(f"Required matching candidates: {REQUIRED_MATCHING_CANDIDATES}")
+    write_log(f"Wake prefix threshold: {WAKE_PREFIX_THRESHOLD:.2f}")
+    write_log(f"Name threshold: {NAME_THRESHOLD:.2f}")
     write_log(f"Accepted phrases: {', '.join(KNOCK_PHRASES)}")
     write_log(f"Hotwords: {HOTWORDS_TEXT}")
 
