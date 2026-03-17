@@ -62,10 +62,11 @@ def load_config(base_dir: str) -> AppConfig:
         "\u0410\u043b\u0444\u0440\u0435\u0434",
         "\u0430\u043b\u0444\u0440\u0435\u0434",
     ]
+    ollama_model = _get_env("ALFRED_OLLAMA_MODEL", "deepseek-r1:14b")
     return AppConfig(
         base_dir=base_dir,
         codex_exe=os.getenv("ALFRED_CODEX_EXE", "codex"),
-        ollama_model=_get_env("ALFRED_OLLAMA_MODEL", "deepseek-r1:14b"),
+        ollama_model=ollama_model,
         ollama_exe=os.getenv(
             "ALFRED_OLLAMA_EXE",
             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"),
@@ -89,8 +90,8 @@ def load_config(base_dir: str) -> AppConfig:
         image_sampler=_get_env("ALFRED_IMAGE_SAMPLER", "default"),
         image_attention_backend=_get_env("ALFRED_IMAGE_ATTENTION_BACKEND", ""),
         image_compile=_get_env_bool("ALFRED_IMAGE_COMPILE", False),
-        system_prompt="""You are Alfred, a local voice assistant running on the user's computer.
-Your current language model backend is deepseek-r1:14b through Ollama unless the runtime says otherwise.
+        system_prompt=f"""You are Alfred, a local voice assistant running on the user's computer.
+Your current language model backend is {ollama_model} through Ollama.
 Speak naturally, like a helpful real assistant, not like a generic chatbot.
 Keep awareness of the ongoing conversation and use prior messages as context.
 Always reply in the same language the user is currently using unless the user asks you to switch languages.

@@ -1,5 +1,6 @@
 import json
 import re
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -45,7 +46,7 @@ class WebTool(Tool):
         return self._llm_detects_web_request(context, text)
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
-        language = context.detect_language(text)
+        language = self._resolve_response_language(context, text)
         try:
             if self._is_weather_request(text) or self._is_weather_followup(text):
                 location, day_offset = self._extract_weather_request(text)
@@ -54,11 +55,10 @@ class WebTool(Tool):
             else:
                 query = context.routed_query if context.routed_tool_name == "web" and context.routed_query else self._extract_search_query(text)
                 normalized_query = self._normalize_search_query(context, query)
-                search_queries = self._build_search_queries(context, normalized_query, language)
-                print(f"[WEB] Searching web for queries: {search_queries}")
-                results = self._search_web_multi(context, search_queries)
-                print(f"[WEB] Search results found: {len(results)}")
-                reply_text = self._answer_from_web_results(context, text, results)
+                search_url = self._build_browser_search_url(normalized_query)
+                print(f"[WEB] Opening browser search for query: {normalized_query}")
+                webbrowser.open(search_url)
+                reply_text = self._build_browser_search_reply(language, normalized_query)
         except Exception as e:
             reply_text = (
                 f"Не удалось выполнить запрос из интернета: {e}"
@@ -66,6 +66,14 @@ class WebTool(Tool):
                 else f"I could not complete the internet request: {e}"
             )
         return ToolResult(handled=True, reply_text=reply_text)
+
+    def _build_browser_search_url(self, query: str) -> str:
+        return f"https://www.google.com/search?q={quote_plus(query)}"
+
+    def _build_browser_search_reply(self, language: str, query: str) -> str:
+        if language == "ru":
+            return f"Открываю результаты поиска в браузере по запросу {query}."
+        return f"Opening browser search results for {query}."
 
     def _is_browser_open_request(self, text: str) -> bool:
         lowered = text.lower().strip()
@@ -529,3 +537,14 @@ class WebTool(Tool):
             ]
         )
         return context.normalize_memory_text(response["message"]["content"])
+
+    def _resolve_response_language(self, context: ToolContext, text: str) -> str:
+        candidates = [text, context.routed_query or "", context.user_text or ""]
+        if any(re.search(r"[\u0400-\u04FF]", candidate) for candidate in candidates if candidate):
+            return "ru"
+        return context.language or context.detect_language(text)
+
+    def _build_browser_search_reply(self, language: str, query: str) -> str:
+        if language == "ru":
+            return f"Открываю результаты поиска в браузере по запросу {query}."
+        return f"Opening browser search results for {query}."

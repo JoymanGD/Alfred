@@ -34,8 +34,17 @@ class SystemTool(Tool):
         return any(re.search(pattern, lowered) for pattern in patterns)
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
-        language = context.detect_language(text)
+        language = context.language or context.detect_language(text)
         routed_action = (context.routed_args or {}).get("action") if context.routed_args else None
+        routed_query = (context.routed_query or "").strip().lower()
+        if not routed_action and routed_query in {
+            "restart_assistant",
+            "shutdown_assistant",
+            "shutdown_computer",
+            "restart_computer",
+            "close_application",
+        }:
+            routed_action = routed_query
         if routed_action == "restart_assistant":
             self._schedule_alfred_restart()
             reply_text = "Перезапускаю Альфреда." if language == "ru" else "Restarting Alfred."
@@ -532,3 +541,13 @@ class SystemTool(Tool):
                 f"\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 {target}."
             )
         return f"I could not find a running app matching {target}."
+
+    def _build_browser_search_reply(self, language: str, query: str, opened_target: str) -> str:
+        opened_direct_result = "google.com/search?" not in opened_target
+        if language == "ru":
+            if opened_direct_result:
+                return f"Открываю первую найденную страницу и результаты поиска по запросу {query}."
+            return f"Открываю результаты поиска в браузере по запросу {query}."
+        if opened_direct_result:
+            return f"Opening the first result and the search results for {query}."
+        return f"Opening browser results for {query}."

@@ -28,10 +28,12 @@ class AudioEngine:
         self._session_volume_boost_logged = False
 
     def synthesize_audio(self, text: str):
-        language = self.detect_language(text)
         spoken_text = clean_text_for_tts(text)
         if not spoken_text:
             spoken_text = "I have no spoken reply."
+        language = self.detect_language(spoken_text)
+        if re.search(r"[\u0400-\u04FF]", spoken_text) and language not in {"ru", "uk"}:
+            language = "ru"
         audio, sample_rate = self.tts_backend.synthesize(spoken_text, language)
         boosted_audio = self._apply_tts_gain(audio)
         return boosted_audio, sample_rate
