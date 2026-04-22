@@ -20,6 +20,8 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         "web_search",
         "fact",
         "current_events",
+        "screen",
+        "vision",
         "browser_open",
         "system_open",
         "codex_request",
@@ -37,11 +39,15 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         "- web_search: asking to search online or find information.\n"
         "- fact: factual lookup about a person, company, place, event, or thing.\n"
         "- current_events: news, recent developments, live situations, updates.\n"
+        "- screen: answer by capturing the user's screen and analyzing what is visible there.\n"
+        "- vision: answer by looking through the camera and analyzing what is visible.\n"
         "- browser_open: open something in a browser, especially search or a page.\n"
         "- system_open: open an app, file, folder, or website directly, or control the assistant itself.\n"
         "- codex_request: send a development task to Codex CLI for the current project.\n"
         "- music_play: play a song, artist, playlist, genre, or mood music.\n"
         "- music_control: next, pause, resume, louder, quieter, mute, previous, unmute, full volume, volume status, or explain why Alfred is hard to hear.\n"
+        "- Use screen when the user is asking about what is on the monitor, screen, desktop, window, app, browser page, or any visible on-screen content.\n"
+        "- Use vision when the user is asking about something Alfred must see to answer, such as an object, text, packaging, what is in the user's hand, what is on the desk, colors, appearance, or anything visually present.\n"
         "- If the user asks to play or turn on music, a song, an artist, a playlist, a genre, or mood music, use music_play even if they also mention the browser.\n"
         "- If the user asks to open news, search results, articles, or information in the browser, use browser_open.\n"
         "- Use browser_open only when the main goal is to open a page or search results in the browser.\n"
@@ -80,6 +86,8 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
         "Return JSON with this schema:\n"
         '{"intent":"...", "normalized_query":"...", "args":{"location":"","time":"","site":"","action":"","delta_percent":"","factor":"","qualifier":""}}\n'
         "Use normalized_query to rewrite the request into the best input for the chosen tool.\n"
+        "For screen, normalized_query should usually stay close to the user's original request.\n"
+        "For vision, normalized_query should usually stay close to the user's original request.\n"
         "For browser_open, normalized_query should be the clean browser search phrase.\n"
         "For web_search, fact, and current_events, normalized_query should be the clean web search phrase.\n"
         "For music_play, normalized_query should be the clean music search phrase.\n"
@@ -122,6 +130,49 @@ def analyze_request(context: ToolContext, text: str, tool_registry: ToolRegistry
 
 def _postprocess_route_decision(text: str, decision: RouteDecision) -> RouteDecision:
     lowered = text.lower()
+    assistant_restart_patterns = [
+        r"\brestart\s+alfred\b",
+        r"\breboot\s+alfred\b",
+        r"\brestart\s+yourself\b",
+        r"\breboot\s+yourself\b",
+        r"\bперезапусти\b",
+        r"\bперезагрузись\b",
+        r"\bперезапустись\b",
+    ]
+    assistant_shutdown_patterns = [
+        r"\bturn\s+off\s+alfred\b",
+        r"\bshutdown\s+alfred\b",
+        r"\bshut\s+yourself\s+down\b",
+        r"\bвыключи\s+альфреда\b",
+        r"\bотключись\b",
+    ]
+    computer_terms = [
+        "computer",
+        "pc",
+        "laptop",
+        "\u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440",
+        "\u043f\u043a",
+        "\u043d\u043e\u0443\u0442\u0431\u0443\u043a",
+    ]
+
+    if any(re.search(pattern, lowered) for pattern in assistant_restart_patterns):
+        if not any(term in lowered for term in computer_terms):
+            return RouteDecision(
+                intent="system_open",
+                tool_name="system",
+                normalized_query=None,
+                args={"action": "restart_assistant"},
+            )
+
+    if any(re.search(pattern, lowered) for pattern in assistant_shutdown_patterns):
+        if not any(term in lowered for term in computer_terms):
+            return RouteDecision(
+                intent="system_open",
+                tool_name="system",
+                normalized_query=None,
+                args={"action": "shutdown_assistant"},
+            )
+
     hearing_issue_patterns = [
         r"\bwhy\s+is\s+alfred\s+so\s+hard\s+to\s+hear\b",
         r"\balfred\b.*\b(?:hard|quiet|low)\b.*\b(?:hear|hearing)\b",
@@ -272,6 +323,8 @@ def map_intent_to_tool_name(intent: str) -> str | None:
         "web_search": "web",
         "fact": "web",
         "current_events": "web",
+        "screen": "screen",
+        "vision": "vision",
         "browser_open": "system",
         "system_open": "system",
         "codex_request": "codex",

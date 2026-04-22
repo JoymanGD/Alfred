@@ -50,16 +50,15 @@ if not exist ".venv\Scripts\python.exe" (
     )
 )
 
-echo [SETUP] Activating virtual environment...
-call ".venv\Scripts\activate.bat"
-if not %errorlevel%==0 (
-    echo [ERROR] Failed to activate the virtual environment.
+set "VENV_PYTHON=.venv\Scripts\python.exe"
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] Virtual environment Python was not found at %VENV_PYTHON%.
     pause
     exit /b 1
 )
 
 echo [SETUP] Upgrading pip...
-python -m pip install -U pip
+"%VENV_PYTHON%" -m pip install -U pip
 if not %errorlevel%==0 (
     echo [ERROR] Failed to upgrade pip.
     pause
@@ -67,7 +66,7 @@ if not %errorlevel%==0 (
 )
 
 echo [SETUP] Installing Alfred dependencies...
-python -m pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect
+"%VENV_PYTHON%" -m pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
 if not %errorlevel%==0 (
     echo [ERROR] Failed to install one or more Python packages.
     pause

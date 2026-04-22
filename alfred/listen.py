@@ -48,8 +48,8 @@ def extract_wake_command(text: str, wake_words: list[str], normalize_text):
         if before:
             print(f"[WAKE] Fuzzy wake word match: {cleaned[start:end]}")
             return before
-        print(f"[WAKE] Fuzzy wake word match: {cleaned[start:end]}")
-        return ""
+        print(f"[WAKE] Ignored fuzzy wake-only match: {cleaned[start:end]}")
+        return None
 
     return None
 
@@ -99,6 +99,8 @@ def mic_listener(
     wake_followup_seconds: float,
     tts_playing_event,
     tts_interrupt_event,
+    followup_signal_queue,
+    restart_signal_queue,
     wake_words: list[str],
     hotwords: list[str] | None,
     normalize_text,
@@ -130,8 +132,20 @@ def mic_listener(
                 utterance_active = False
                 pre_speech_buffer = deque(maxlen=pre_speech_blocks)
                 wake_followup_until = 0.0
+                self_echo_guard_until = 0.0
 
                 while True:
+                    while not followup_signal_queue.empty():
+                        followup_signal_queue.get_nowait()
+                        wake_followup_until = time.monotonic() + wake_followup_seconds
+                        self_echo_guard_until = time.monotonic() + 1.2
+                        print("[WAKE] Refreshed follow-up window after assistant reply.")
+
+                    if not restart_signal_queue.empty():
+                        restart_signal_queue.get_nowait()
+                        print("[ASR] Restart requested, recreating microphone stream.")
+                        break
+
                     block, _ = stream.read(block_size)
                     pcm = block[:, 0].astype(np.float32)
                     pcm_tensor = torch.from_numpy(pcm)
@@ -171,8 +185,12 @@ def mic_listener(
                         if text:
                             print(f"[ASR HEARD]: {text}")
                             wake_command = extract_wake_command(text, wake_words, normalize_text)
+                            now = time.monotonic()
+                            if now < self_echo_guard_until:
+                                if wake_command == "" or wake_command is None:
+                                    print("[WAKE] Ignored likely self-echo right after assistant reply.")
+                                    continue
                             if wake_command is None:
-                                now = time.monotonic()
                                 if now < wake_followup_until:
                                     print("[WAKE] Accepted follow-up command without wake word.")
                                     wake_followup_until = now + wake_followup_seconds

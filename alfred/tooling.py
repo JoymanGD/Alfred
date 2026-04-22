@@ -13,6 +13,9 @@ class ToolContext:
     fetch_url: Callable[[str], str]
     fetch_json: Callable[..., dict[str, Any]]
     generate_image: Callable[[str], Any] | None = None
+    analyze_vision: Callable[[str], str] | None = None
+    analyze_screen: Callable[[str], str] | None = None
+    restart_listener: Callable[[], None] | None = None
     event_out_queue: Any = None
     routed_intent: str | None = None
     routed_tool_name: str | None = None

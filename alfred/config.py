@@ -9,6 +9,21 @@ def _parse_csv_env(value: str | None, default: list[str]) -> list[str]:
     return [item for item in items if item] or default
 
 
+def _parse_int_csv_env(value: str | None, default: list[int]) -> list[int]:
+    if not value:
+        return default
+    items: list[int] = []
+    for item in value.split(","):
+        stripped = item.strip()
+        if not stripped:
+            continue
+        try:
+            items.append(int(stripped))
+        except ValueError:
+            continue
+    return items or default
+
+
 def _get_env(name: str, default: str) -> str:
     return os.getenv(name, default).strip()
 
@@ -45,6 +60,9 @@ class AppConfig:
     image_sampler: str
     image_attention_backend: str
     image_compile: bool
+    camera_enabled: bool
+    camera_indexes: list[int]
+    camera_warmup_frames: int
     system_prompt: str
     ru_weather_words: list[str]
     ru_search_words: list[str]
@@ -90,6 +108,9 @@ def load_config(base_dir: str) -> AppConfig:
         image_sampler=_get_env("ALFRED_IMAGE_SAMPLER", "default"),
         image_attention_backend=_get_env("ALFRED_IMAGE_ATTENTION_BACKEND", ""),
         image_compile=_get_env_bool("ALFRED_IMAGE_COMPILE", False),
+        camera_enabled=_get_env_bool("ALFRED_CAMERA_ENABLED", True),
+        camera_indexes=_parse_int_csv_env(os.getenv("ALFRED_CAMERA_INDEXES"), [0, 1, 2]),
+        camera_warmup_frames=int(os.getenv("ALFRED_CAMERA_WARMUP_FRAMES", "5")),
         system_prompt=f"""You are Alfred, a local voice assistant running on the user's computer.
 Your current language model backend is {ollama_model} through Ollama.
 Speak naturally, like a helpful real assistant, not like a generic chatbot.

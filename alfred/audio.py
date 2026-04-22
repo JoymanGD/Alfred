@@ -250,7 +250,15 @@ def boost_current_process_session_volume() -> bool:
             ole32.CoUninitialize()
 
 
-def speaker_loop(event_out, event_img, audio_engine: AudioEngine, interrupt_event, playing_event, output_dir: str):
+def speaker_loop(
+    event_out,
+    event_img,
+    audio_engine: AudioEngine,
+    interrupt_event,
+    playing_event,
+    output_dir: str,
+    followup_signal_queue,
+):
     while True:
         reply_text = event_out.get()
         print("AI:", reply_text)
@@ -260,6 +268,8 @@ def speaker_loop(event_out, event_img, audio_engine: AudioEngine, interrupt_even
             audio_engine.play_audio_interruptible(audio, sample_rate, interrupt_event, playing_event)
         except Exception as e:
             print(f"[TTS ERROR]: {e}")
+        finally:
+            followup_signal_queue.put("assistant_replied")
 
         while not event_img.empty():
             img = event_img.get()

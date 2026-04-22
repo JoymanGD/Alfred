@@ -16,6 +16,7 @@ set "ALFRED_IMAGE_SAMPLER=euler_a"
 set "ALFRED_IMAGE_ATTENTION_BACKEND="
 set "ALFRED_IMAGE_COMPILE=1"
 set "ALFRED_TTS_GAIN=2.8"
+set "ALFRED_LOG=%~dp0alfred_run.log"
 
 set "ALFRED_PYTHON=%~dp0.venv\Scripts\python.exe"
 if exist "%ALFRED_PYTHON%" goto run_alfred
@@ -40,7 +41,19 @@ set "ALFRED_PYTHON=python"
 :run_alfred
 echo Starting Alfred with model: %ALFRED_OLLAMA_MODEL%
 echo Running Python: %ALFRED_PYTHON%
-"%ALFRED_PYTHON%" alfred-bot.py
+echo Log file: %ALFRED_LOG%
+echo [%date% %time%] Starting Alfred> "%ALFRED_LOG%"
+"%ALFRED_PYTHON%" alfred-bot.py >> "%ALFRED_LOG%" 2>&1
+set "ALFRED_EXIT=%errorlevel%"
+
+if not "%ALFRED_EXIT%"=="0" (
+  echo Alfred exited with error code %ALFRED_EXIT%.
+  echo Check the log file: %ALFRED_LOG%
+  echo.
+  type "%ALFRED_LOG%"
+  pause
+  exit /b %ALFRED_EXIT%
+)
 
 echo Alfred stopped.
-exit
+exit /b 0

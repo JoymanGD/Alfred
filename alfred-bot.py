@@ -20,7 +20,9 @@ from alfred.runtime import (
     normalize_memory_text,
 )
 from alfred.services import ModelServices
+from alfred.screen import analyze_screen_request
 from alfred.tts import TTSConfig, create_tts_backend
+from alfred.vision import VisionConfig, analyze_vision_request
 
 print("Running Python:", sys.executable)
 
@@ -30,6 +32,8 @@ config = load_config(BASE_DIR)
 event_in = queue.Queue()
 event_out = queue.Queue()
 event_img = queue.Queue()
+followup_signal_queue = queue.Queue()
+restart_listener_queue = queue.Queue()
 
 tts_interrupt_event = threading.Event()
 tts_playing_event = threading.Event()
@@ -52,12 +56,47 @@ agent_config = AgentConfig(
     ru_weather_words=config.ru_weather_words,
     ru_search_words=config.ru_search_words,
     ru_fact_words=config.ru_fact_words,
+    vision_config=VisionConfig(
+        enabled=config.camera_enabled,
+        camera_indexes=config.camera_indexes,
+        warmup_frames=config.camera_warmup_frames,
+    ),
 )
 tool_registry = build_tool_registry(agent_config)
 
 
 def generate_image_payload(prompt: str):
     return services.generate_image_payload(prompt)
+
+
+def analyze_vision_payload(prompt: str):
+    return analyze_vision_request(
+        text=prompt,
+        config=agent_config.vision_config,
+        ollama_chat=ollama_chat,
+        normalize_text=normalize_memory_text,
+        system_prompt=config.system_prompt,
+        language=detect_language(prompt),
+    )
+
+
+def analyze_screen_payload(prompt: str):
+    return analyze_screen_request(
+        text=prompt,
+        ollama_chat=ollama_chat,
+        normalize_text=normalize_memory_text,
+        system_prompt=config.system_prompt,
+        language=detect_language(prompt),
+    )
+
+
+def request_listener_restart():
+    restart_listener_queue.put("restart")
+
+
+setattr(agent_config, "analyze_vision", analyze_vision_payload)
+setattr(agent_config, "analyze_screen", analyze_screen_payload)
+setattr(agent_config, "restart_listener", request_listener_restart)
 
 
 
@@ -85,6 +124,10 @@ def start():
         f"device={config.image_device}, steps={config.image_steps}, cfg={config.image_guidance_scale}, "
         f"size={config.image_width}x{config.image_height}, sampler={config.image_sampler}, "
         f"attention_backend={config.image_attention_backend or 'default'}, compile={config.image_compile}"
+    )
+    print(
+        f"[VISION] Camera enabled={config.camera_enabled}, "
+        f"indexes={config.camera_indexes}, warmup_frames={config.camera_warmup_frames}"
     )
     print("[MUSIC] Backend: YouTube Music Web")
     threading.Thread(
@@ -117,6 +160,8 @@ def start():
             config.wake_followup_seconds,
             tts_playing_event,
             tts_interrupt_event,
+            followup_signal_queue,
+            restart_listener_queue,
             config.wake_words,
             config.asr_hotwords,
             normalize_memory_text,
@@ -125,7 +170,15 @@ def start():
     ).start()
     threading.Thread(
         target=speaker_loop,
-        args=(event_out, event_img, audio_engine, tts_interrupt_event, tts_playing_event, BASE_DIR),
+        args=(
+            event_out,
+            event_img,
+            audio_engine,
+            tts_interrupt_event,
+            tts_playing_event,
+            BASE_DIR,
+            followup_signal_queue,
+        ),
         daemon=True,
     ).start()
     print("[START] Agent, ASR, and TTS threads started.")

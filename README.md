@@ -6,6 +6,7 @@ Alfred is a local voice assistant for Windows. It combines speech recognition, a
 
 - Wake-word assistant with spoken replies
 - Local chat with Ollama
+- Camera-based vision requests for multimodal Ollama models such as Gemma 3
 - Web search, weather, and current-information lookups
 - Open apps, sites, browser searches, and search results
 - Send coding tasks to Codex CLI and hear a short spoken completion summary
@@ -79,7 +80,7 @@ git submodule update --init --recursive
 python -m venv .venv
 .venv\Scripts\activate
 pip install -U pip
-pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect
+pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
 ```
 
 If you already cloned the repository without submodules, run:
@@ -201,6 +202,20 @@ You can also wake Alfred first and then speak the command during the follow-up w
 - `Yes?`
 - `Play music`
 
+## Vision Commands
+
+If your Ollama model supports images, Alfred can take a picture from an available camera and answer based on what it sees.
+
+Examples:
+
+- `what do you see`
+- `do you see my keyboard`
+- `what's on camera right now`
+- `что ты видишь`
+- `ты видишь кружку на столе`
+
+If no camera is available, Alfred falls back to a spoken message that he cannot see anything.
+
 ## Codex Support
 
 Alfred can send development tasks to Codex CLI in the current project directory without opening VS Code.
@@ -258,6 +273,9 @@ Useful environment variables:
 - `ALFRED_IMAGE_HEIGHT`
 - `ALFRED_IMAGE_GUIDANCE_SCALE`
 - `ALFRED_IMAGE_SAMPLER`
+- `ALFRED_CAMERA_ENABLED`
+- `ALFRED_CAMERA_INDEXES`
+- `ALFRED_CAMERA_WARMUP_FRAMES`
 - `ALFRED_IMAGE_ATTENTION_BACKEND`
 - `ALFRED_IMAGE_COMPILE`
 - `ALFRED_KNOCK_WHISPER_MODEL`
