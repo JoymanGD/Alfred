@@ -1,11 +1,15 @@
 import os
 from dataclasses import dataclass, replace
 
+from alfred.execution_planner import refine_route_with_planning
 from alfred.router import analyze_request
+from alfred.runtime import build_reply_language_instruction
 from alfred.tooling import ToolContext, ToolRegistry
 from alfred.tools.codex import CodexTool, CodexToolConfig
 from alfred.tools.image import ImageTool
+from alfred.tools.local_files import LocalFilesTool, LocalFilesToolConfig
 from alfred.tools.music import MusicTool, MusicToolConfig
+from alfred.tools.plan import PlanTool, PlanToolConfig
 from alfred.tools.screen import ScreenTool
 from alfred.tools.system import SystemTool, SystemToolConfig
 from alfred.tools.vision import VisionTool
@@ -21,6 +25,7 @@ class AgentConfig:
     ru_weather_words: list[str]
     ru_search_words: list[str]
     ru_fact_words: list[str]
+    plan_storage_path: str
     vision_config: VisionConfig | None = None
 
 
@@ -54,6 +59,11 @@ def build_tool_registry(config: AgentConfig) -> ToolRegistry:
                 }
             )
         ),
+        LocalFilesTool(
+            LocalFilesToolConfig(
+                base_dir=config.base_dir,
+            )
+        ),
         WebTool(
             WebToolConfig(
                 ru_weather_words=config.ru_weather_words,
@@ -65,6 +75,11 @@ def build_tool_registry(config: AgentConfig) -> ToolRegistry:
             CodexToolConfig(
                 codex_exe=config.codex_exe,
                 project_dir=config.base_dir,
+            )
+        ),
+        PlanTool(
+            PlanToolConfig(
+                storage_path=config.plan_storage_path,
             )
         ),
         ScreenTool(),
@@ -82,6 +97,7 @@ def agent_loop(
     conversation_memory,
     config: AgentConfig,
     ollama_chat,
+    router_ollama_chat,
     normalize_memory_text,
     detect_language,
     fetch_url,
@@ -104,7 +120,9 @@ def agent_loop(
             user_text=user_text,
             language=language,
             system_prompt=config.system_prompt,
+            recent_history=conversation_memory.recent_history(4),
             ollama_chat=ollama_chat,
+            router_ollama_chat=router_ollama_chat,
             normalize_memory_text=normalize_memory_text,
             detect_language=detect_language,
             fetch_url=fetch_url,
@@ -113,9 +131,11 @@ def agent_loop(
             analyze_vision=getattr(config, "analyze_vision", None),
             analyze_screen=getattr(config, "analyze_screen", None),
             restart_listener=getattr(config, "restart_listener", None),
+            assistant_control=getattr(config, "assistant_control", None),
             event_out_queue=event_out,
         )
         route_decision = analyze_request(tool_context, user_text, tool_registry)
+        route_decision = refine_route_with_planning(tool_context, user_text, route_decision)
         routed_context = replace(
             tool_context,
             routed_intent=route_decision.intent,
@@ -132,12 +152,7 @@ def agent_loop(
             )
             tool_result = routed_tool.handle(routed_context, user_text)
         else:
-            matched_tool = tool_registry.first_matching_tool(routed_context, user_text)
-            if matched_tool is not None:
-                print(f"[ROUTER] Fallback tool match: {matched_tool.name} for: {user_text}")
-                tool_result = matched_tool.handle(routed_context, user_text)
-            else:
-                tool_result = None
+            tool_result = None
         if tool_result is not None and tool_result.handled:
             if tool_result.image_payload is not None:
                 event_img.put(tool_result.image_payload)
@@ -149,9 +164,20 @@ def agent_loop(
             continue
 
         try:
-            messages = conversation_memory.build_messages(config.system_prompt, user_text)
+            reply_language_instruction = normalize_memory_text(
+                f"{config.system_prompt}\n{build_reply_language_instruction(language)}"
+            )
+            messages = conversation_memory.build_messages(reply_language_instruction, user_text)
             response = ollama_chat(messages)
-            reply_text = normalize_memory_text(response["message"]["content"])
+            raw_reply_text = response.get("message", {}).get("content", "")
+            reply_text = normalize_memory_text(raw_reply_text)
+            if not reply_text:
+                print(f"[LLM] Empty reply from model for: {user_text}")
+                reply_text = (
+                    "Извини, у меня не получилось сформировать ответ. Попробуй переформулировать запрос."
+                    if language == "ru"
+                    else "Sorry, I couldn't form a reply. Please try rephrasing your request."
+                )
         except Exception as e:
             reply_text = (
                 f"\u041e\u0448\u0438\u0431\u043a\u0430 Ollama: {e}"

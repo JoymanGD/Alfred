@@ -26,12 +26,25 @@ class AudioEngine:
         self.detect_language = detect_language
         self.tts_gain = max(0.1, float(tts_gain))
         self._session_volume_boost_logged = False
+        self._warmup_done = False
+
+    def warmup_tts(self):
+        if self._warmup_done:
+            return
+        warmup = getattr(self.tts_backend, "warmup", None)
+        if callable(warmup):
+            warmup()
+        self._warmup_done = True
 
     def synthesize_audio(self, text: str):
         spoken_text = clean_text_for_tts(text)
+        language = self.detect_language(text or spoken_text)
         if not spoken_text:
-            spoken_text = "I have no spoken reply."
-        language = self.detect_language(spoken_text)
+            spoken_text = (
+                "Извини, я не смог сформировать ответ."
+                if language == "ru"
+                else "Sorry, I couldn't form a reply."
+            )
         if re.search(r"[\u0400-\u04FF]", spoken_text) and language not in {"ru", "uk"}:
             language = "ru"
         audio, sample_rate = self.tts_backend.synthesize(spoken_text, language)
@@ -258,17 +271,26 @@ def speaker_loop(
     playing_event,
     output_dir: str,
     followup_signal_queue,
+    input_server=None,
 ):
     while True:
         reply_text = event_out.get()
-        print("AI:", reply_text)
+        if input_server is not None:
+            input_server.notify_assistant_message(reply_text)
+        if input_server is None or not input_server.has_chat_clients():
+            print("AI:", reply_text)
 
         try:
+            if input_server is not None:
+                input_server.notify_tts_started()
             audio, sample_rate = audio_engine.synthesize_audio(reply_text)
             audio_engine.play_audio_interruptible(audio, sample_rate, interrupt_event, playing_event)
         except Exception as e:
             print(f"[TTS ERROR]: {e}")
         finally:
+            if input_server is not None:
+                input_server.notify_tts_finished()
+                input_server.notify_assistant_replied()
             followup_signal_queue.put("assistant_replied")
 
         while not event_img.empty():

@@ -1,0 +1,18 @@
+Running Python: C:\Users\Joyman\Desktop\Alfred\.venv\Scripts\python.exe
+[OLLAMA] Already running.
+[LLM] Using Ollama model: deepseek-r1:14b
+[OLLAMA] Executable path: C:\Users\Joyman\AppData\Local\Programs\Ollama\ollama.exe
+[ASR] Whisper config: model=small, compute_type=float16
+[TTS] Backend: Piper (voices dir: C:\Users\Joyman\Desktop\Alfred\piper-voices)
+[TTS] Supported languages: ar, bg, ca, cs, cy, da, de, el, en, es, fa, fi, fr, hi, hu, id, is, it, ka, kk, lb, lv, ml, ne, nl, no, pl, pt, ro, ru, sk, sl, sr, sv, sw, te, tr, uk, vi, zh
+[TTS] Gain: 2.40x
+[IMAGE] Model: Tongyi-MAI/Z-Image-Turbo, dtype=bfloat16, device=cpu, steps=8, cfg=0.0, size=768x768, sampler=default, attention_backend=default, compile=False
+[VISION] Camera enabled=True, indexes=[0, 1, 2], warmup_frames=5
+[MUSIC] Backend: YouTube Music Web
+[AGENT] Router started.
+[VAD] Loading Silero VAD...
+[START] Agent, ASR, and TTS threads started.
+[VAD] Silero VAD loaded.
+[ASR] Loading Whisper model: small...
+[ASR] Whisper loaded.
+[ASR] Microphone listener started. pre_speech=0.45s, wake_followup=8.00s

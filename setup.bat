@@ -66,7 +66,7 @@ if not %errorlevel%==0 (
 )
 
 echo [SETUP] Installing Alfred dependencies...
-"%VENV_PYTHON%" -m pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
+"%VENV_PYTHON%" -m pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers transformers accelerate safetensors faster-whisper omnivoice silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
 if not %errorlevel%==0 (
     echo [ERROR] Failed to install one or more Python packages.
     pause
@@ -85,5 +85,7 @@ if not %errorlevel%==0 (
 echo [SETUP] Next steps:
 echo [SETUP] 1. Install and start Ollama.
 echo [SETUP] 2. Pull your model, for example: ollama pull gemma3:12b
-echo [SETUP] 3. Run Alfred with run_alfred.bat
+echo [SETUP] 3. Run Alfred with start_alfred_core.bat
+echo [SETUP] 4. Run Alfred input with start_chat.bat or start_voice.bat
+
 pause

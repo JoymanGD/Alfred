@@ -3,7 +3,6 @@ import time
 from io import BytesIO
 
 import torch
-from diffusers import FlowMatchEulerDiscreteScheduler, ZImagePipeline
 from faster_whisper import WhisperModel
 
 
@@ -13,6 +12,7 @@ class ModelServices:
         self._vad_model = None
         self._image_pipe = None
         self._asr_model = None
+        self._resolved_image_device = None
         self._image_compile_fallback_used = False
         self._vad_lock = threading.Lock()
         self._image_lock = threading.Lock()
@@ -49,22 +49,68 @@ class ModelServices:
                     print("[VAD] Silero VAD loaded.")
         return self._vad_model
 
+    def _missing_image_dependency_message(self) -> str:
+        return (
+            "Image generation dependencies are missing. Install them with "
+            "`.venv\\Scripts\\python.exe -m pip install diffusers transformers accelerate safetensors`."
+        )
+
+    def _is_missing_image_dependency_error(self, error: Exception) -> bool:
+        error_text = str(error).lower()
+        return (
+            "requires the transformers library" in error_text
+            or "no module named 'transformers'" in error_text
+            or 'no module named "transformers"' in error_text
+            or "no module named 'diffusers'" in error_text
+            or 'no module named "diffusers"' in error_text
+        )
+
+    def get_image_device(self) -> str:
+        if self._resolved_image_device is not None:
+            return self._resolved_image_device
+
+        configured_device = self.config.image_device.strip() or "cpu"
+        resolved_device = configured_device
+        if configured_device.startswith("cuda") and not torch.cuda.is_available():
+            print(
+                "[ZIT] CUDA was requested for image generation, but this Torch build "
+                "does not have CUDA available. Falling back to CPU."
+            )
+            resolved_device = "cpu"
+
+        self._resolved_image_device = resolved_device
+        return resolved_device
+
     def get_image_pipe(self, use_compile: bool | None = None):
         if self._image_pipe is None:
             with self._image_lock:
                 if self._image_pipe is None:
-                    image_device = self.config.image_device
-                    compile_enabled = self.config.image_compile if use_compile is None else use_compile
+                    try:
+                        from diffusers import (
+                            FlowMatchEulerDiscreteScheduler,
+                            ZImagePipeline,
+                        )
+                    except ImportError as e:
+                        raise RuntimeError(self._missing_image_dependency_message()) from e
+                    image_device = self.get_image_device()
+                    compile_enabled = (
+                        self.config.image_compile if use_compile is None else use_compile
+                    )
                     print("[ZIT] Loading image pipeline...")
                     pipe_kwargs = {"low_cpu_mem_usage": False}
                     if image_device.startswith("cuda"):
                         pipe_kwargs["torch_dtype"] = self._resolve_torch_dtype(
                             self.config.image_torch_dtype
                         )
-                    self._image_pipe = ZImagePipeline.from_pretrained(
-                        self.config.image_model_id,
-                        **pipe_kwargs,
-                    )
+                    try:
+                        self._image_pipe = ZImagePipeline.from_pretrained(
+                            self.config.image_model_id,
+                            **pipe_kwargs,
+                        )
+                    except Exception as e:
+                        if self._is_missing_image_dependency_error(e):
+                            raise RuntimeError(self._missing_image_dependency_message()) from e
+                        raise
                     if self.config.image_sampler.lower() in {"euler_a", "euler-a", "euler a"}:
                         self._image_pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(
                             self._image_pipe.scheduler.config,
@@ -146,7 +192,7 @@ class ModelServices:
             f"[ZIT] Image generation finished in {elapsed:.2f}s "
             f"(steps={self.config.image_steps}, size={self.config.image_width}x{self.config.image_height}, "
             f"cfg={self.config.image_guidance_scale}, sampler={self.config.image_sampler}, "
-            f"device={self.config.image_device})."
+            f"device={self.get_image_device()})."
         )
         bio = BytesIO()
         bio.name = "generated.png"

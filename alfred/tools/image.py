@@ -11,12 +11,14 @@ class ImageTool(Tool):
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.detect_language(text)
         if context.generate_image is None:
-            reply_text = (
-                "Генерация изображений сейчас недоступна."
-                if language == "ru"
-                else "Image generation is unavailable right now."
+            return ToolResult(
+                handled=True,
+                reply_text=(
+                    "Генерация изображений сейчас недоступна."
+                    if language == "ru"
+                    else "Image generation is unavailable right now."
+                ),
             )
-            return ToolResult(handled=True, reply_text=reply_text)
 
         prompt = self._prepare_prompt(context, text)
         print(f"[IMAGE] Optimized prompt: {prompt}")
@@ -25,15 +27,22 @@ class ImageTool(Tool):
             image_payload = context.generate_image(prompt)
         except Exception as e:
             print(f"[IMAGE] Generation failed: {e}")
+            error_message = str(e).strip()
             reply_text = (
-                "Не удалось сгенерировать изображение. Проверь настройки модели и устройства."
-                if language == "ru"
-                else "I could not generate the image. Check the model and device settings."
+                error_message
+                or (
+                    "Не удалось сгенерировать изображение. Проверь настройки модели и устройства."
+                    if language == "ru"
+                    else "Image generation failed. Check the model and device settings."
+                )
             )
             return ToolResult(handled=True, reply_text=reply_text)
 
-        reply_text = "Изображение готово." if language == "ru" else "Image generated."
-        return ToolResult(handled=True, reply_text=reply_text, image_payload=image_payload)
+        return ToolResult(
+            handled=True,
+            reply_text="Изображение готово." if language == "ru" else "Image generated.",
+            image_payload=image_payload,
+        )
 
     def _classify(self, text: str, context: ToolContext | None) -> str:
         if context is None:

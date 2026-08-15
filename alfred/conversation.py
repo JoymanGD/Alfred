@@ -26,3 +26,10 @@ class ConversationMemory:
         messages.extend(history)
         messages.append({"role": "user", "content": user_text})
         return messages
+
+    def recent_history(self, limit: int = 4):
+        with self._lock:
+            history = list(self._history)
+        if limit <= 0:
+            return []
+        return history[-limit:]

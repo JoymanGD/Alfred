@@ -90,7 +90,7 @@ def _wake_similarity(candidate: str, wake_word: str) -> float:
 
 
 def mic_listener(
-    event_in,
+    input_sink,
     get_vad_model,
     get_asr_model,
     min_speech_seconds: float,
@@ -98,7 +98,6 @@ def mic_listener(
     pre_speech_seconds: float,
     wake_followup_seconds: float,
     tts_playing_event,
-    tts_interrupt_event,
     followup_signal_queue,
     restart_signal_queue,
     wake_words: list[str],
@@ -155,7 +154,7 @@ def mic_listener(
 
                     if speaking_now and tts_playing_event.is_set():
                         print("[TTS] Interrupted by user speech.")
-                        tts_interrupt_event.set()
+                        input_sink.interrupt_tts()
 
                     if speaking_now:
                         if not utterance_active:
@@ -194,12 +193,15 @@ def mic_listener(
                                 if now < wake_followup_until:
                                     print("[WAKE] Accepted follow-up command without wake word.")
                                     wake_followup_until = now + wake_followup_seconds
-                                    event_in.put(normalize_text(text))
+                                    input_sink.submit_text(normalize_text(text))
                                     continue
                                 print("[WAKE] Ignored speech without wake word.")
                                 continue
                             wake_followup_until = time.monotonic() + wake_followup_seconds
-                            event_in.put(wake_command)
+                            if wake_command:
+                                input_sink.submit_text(wake_command)
+                            else:
+                                input_sink.trigger_wake()
         except Exception as e:
             print(f"[ASR ERROR]: microphone listener crashed, restarting: {e}")
             time.sleep(0.5)

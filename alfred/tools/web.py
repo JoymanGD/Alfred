@@ -33,22 +33,12 @@ class WebTool(Tool):
         self.last_weather_location: str | None = None
 
     def matches(self, context: ToolContext, text: str) -> bool:
-        if self._is_browser_open_request(text):
-            return False
-        if (
-            self._is_weather_request(text)
-            or self._is_weather_followup(text)
-            or self._is_current_events_request(text)
-            or self._is_web_search_request(text)
-            or self._is_fact_lookup_request(text)
-        ):
-            return True
-        return self._llm_detects_web_request(context, text)
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = self._resolve_response_language(context, text)
         try:
-            if self._is_weather_request(text) or self._is_weather_followup(text):
+            if context.routed_intent == "weather":
                 location, day_offset = self._extract_weather_request(text)
                 self.last_weather_location = location
                 reply_text = self._get_weather_report(context, location, language, day_offset)
@@ -88,7 +78,38 @@ class WebTool(Tool):
     def _is_weather_request(self, text: str) -> bool:
         lowered = text.lower()
         patterns = ["weather", "temperature", "forecast", *self.config.ru_weather_words]
-        return any(pattern in lowered for pattern in patterns)
+        if not any(pattern in lowered for pattern in patterns):
+            return False
+
+        request_markers = [
+            "?",
+            "what's the weather",
+            "what is the weather",
+            "how's the weather",
+            "check the weather",
+            "tell me the weather",
+            "forecast for",
+            "temperature in",
+            "какая погода",
+            "какая сегодня погода",
+            "что с погодой",
+            "узнай погоду",
+            "посмотри погоду",
+            "скажи погоду",
+            "какая температура",
+            "прогноз",
+        ]
+        if any(marker in lowered for marker in request_markers):
+            return True
+
+        conversational_patterns = [
+            r"\bпогода\s+.*\bне\s+очень\b",
+            r"\bпогода\s+.*\bплох",
+            r"\bпогода\s+.*\bхорош",
+            r"\bweather\s+.*\b(isn'?t|is not|wasn'?t|was not)\b",
+            r"\bweather\s+.*\b(bad|good|nice|awful|terrible)\b",
+        ]
+        return not any(re.search(pattern, lowered) for pattern in conversational_patterns)
 
     def _is_weather_followup(self, text: str) -> bool:
         if not self.last_weather_location:

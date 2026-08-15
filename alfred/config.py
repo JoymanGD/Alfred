@@ -40,6 +40,7 @@ class AppConfig:
     base_dir: str
     codex_exe: str
     ollama_model: str
+    router_ollama_model: str
     ollama_exe: str
     whisper_model: str
     whisper_compute_type: str
@@ -49,7 +50,10 @@ class AppConfig:
     pre_speech_seconds: float
     wake_followup_seconds: float
     tts_gain: float
-    piper_voices_dir: str
+    tts_device: str
+    tts_reference_audio_path: str
+    tts_reference_text: str
+    tts_voice_instruct: str
     image_model_id: str
     image_torch_dtype: str
     image_device: str
@@ -67,6 +71,7 @@ class AppConfig:
     ru_weather_words: list[str]
     ru_search_words: list[str]
     ru_fact_words: list[str]
+    plan_storage_path: str
     wake_words: list[str]
     asr_hotwords: list[str]
 
@@ -81,10 +86,12 @@ def load_config(base_dir: str) -> AppConfig:
         "\u0430\u043b\u0444\u0440\u0435\u0434",
     ]
     ollama_model = _get_env("ALFRED_OLLAMA_MODEL", "deepseek-r1:14b")
+    router_ollama_model = _get_env("ALFRED_ROUTER_OLLAMA_MODEL", ollama_model)
     return AppConfig(
         base_dir=base_dir,
         codex_exe=os.getenv("ALFRED_CODEX_EXE", "codex"),
         ollama_model=ollama_model,
+        router_ollama_model=router_ollama_model,
         ollama_exe=os.getenv(
             "ALFRED_OLLAMA_EXE",
             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"),
@@ -97,7 +104,13 @@ def load_config(base_dir: str) -> AppConfig:
         pre_speech_seconds=float(os.getenv("ALFRED_PRE_SPEECH_SECONDS", "0.45")),
         wake_followup_seconds=float(os.getenv("ALFRED_WAKE_FOLLOWUP_SECONDS", "8.0")),
         tts_gain=float(os.getenv("ALFRED_TTS_GAIN", "2.4")),
-        piper_voices_dir=os.getenv("ALFRED_PIPER_VOICES_DIR", os.path.join(base_dir, "piper-voices")),
+        tts_device=_get_env("ALFRED_TTS_DEVICE", "auto"),
+        tts_reference_audio_path=os.getenv("ALFRED_TTS_REFERENCE_AUDIO", ""),
+        tts_reference_text=os.getenv("ALFRED_TTS_REFERENCE_TEXT", ""),
+        tts_voice_instruct=_get_env(
+            "ALFRED_TTS_VOICE_INSTRUCT",
+            "male, low pitch",
+        ),
         image_model_id=_get_env("ALFRED_IMAGE_MODEL_ID", "Tongyi-MAI/Z-Image-Turbo"),
         image_torch_dtype=_get_env("ALFRED_IMAGE_TORCH_DTYPE", "bfloat16"),
         image_device=_get_env("ALFRED_IMAGE_DEVICE", "cpu"),
@@ -111,6 +124,7 @@ def load_config(base_dir: str) -> AppConfig:
         camera_enabled=_get_env_bool("ALFRED_CAMERA_ENABLED", True),
         camera_indexes=_parse_int_csv_env(os.getenv("ALFRED_CAMERA_INDEXES"), [0, 1, 2]),
         camera_warmup_frames=int(os.getenv("ALFRED_CAMERA_WARMUP_FRAMES", "5")),
+        plan_storage_path=os.getenv("ALFRED_PLAN_STORAGE_PATH", os.path.join(base_dir, "alfred_plan.json")),
         system_prompt=f"""You are Alfred, a local voice assistant running on the user's computer.
 Your current language model backend is {ollama_model} through Ollama.
 Speak naturally, like a helpful real assistant, not like a generic chatbot.

@@ -2,9 +2,9 @@
 chcp 65001 > nul
 setlocal
 cd /d "%~dp0"
-powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "$code='[DllImport(\"kernel32.dll\")] public static extern IntPtr GetConsoleWindow(); [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);'; $type=Add-Type -MemberDefinition $code -Name ConsoleWindow -Namespace Alfred -PassThru; $hwnd=$type::GetConsoleWindow(); if($hwnd -ne [IntPtr]::Zero){$null=$type::ShowWindowAsync($hwnd, 9); $null=$type::ShowWindowAsync($hwnd, 5)}" > nul 2>&1
 
-set "ALFRED_OLLAMA_MODEL=gemma3:12b"
+set "ALFRED_OLLAMA_MODEL=gemma4:12b"
+set "ALFRED_ROUTER_OLLAMA_MODEL=qwen3.5:2b"
 set "ALFRED_IMAGE_MODEL_ID=Tongyi-MAI/Z-Image-Turbo"
 set "ALFRED_IMAGE_TORCH_DTYPE=bf16"
 set "ALFRED_IMAGE_DEVICE=cuda"
@@ -16,7 +16,9 @@ set "ALFRED_IMAGE_SAMPLER=euler_a"
 set "ALFRED_IMAGE_ATTENTION_BACKEND="
 set "ALFRED_IMAGE_COMPILE=1"
 set "ALFRED_TTS_GAIN=2.8"
+set "ALFRED_TTS_VOICE_INSTRUCT=male, low pitch"
 set "ALFRED_LOG=%~dp0alfred_run.log"
+set "PYTHONUNBUFFERED=1"
 
 set "ALFRED_PYTHON=%~dp0.venv\Scripts\python.exe"
 if exist "%ALFRED_PYTHON%" goto run_alfred
@@ -43,7 +45,8 @@ echo Starting Alfred with model: %ALFRED_OLLAMA_MODEL%
 echo Running Python: %ALFRED_PYTHON%
 echo Log file: %ALFRED_LOG%
 echo [%date% %time%] Starting Alfred> "%ALFRED_LOG%"
-"%ALFRED_PYTHON%" alfred-bot.py >> "%ALFRED_LOG%" 2>&1
+echo This is the Alfred core window. Use start_chat.bat or start_voice.bat for input.
+"%ALFRED_PYTHON%" -u alfred-bot.py --mode core
 set "ALFRED_EXIT=%errorlevel%"
 
 if not "%ALFRED_EXIT%"=="0" (

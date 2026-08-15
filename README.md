@@ -1,6 +1,6 @@
 # Alfred
 
-Alfred is a local voice assistant for Windows. It combines speech recognition, a local LLM through Ollama, multilingual Piper TTS, browser and desktop actions, web search, music playback through YouTube Music Web, image generation, and Codex CLI support for coding tasks.
+Alfred is a local voice assistant for Windows. It combines speech recognition, a local LLM through Ollama, multilingual OmniVoice TTS, browser and desktop actions, web search, music playback through YouTube Music Web, image generation, and Codex CLI support for coding tasks.
 
 ## Features
 
@@ -8,6 +8,7 @@ Alfred is a local voice assistant for Windows. It combines speech recognition, a
 - Local chat with Ollama
 - Camera-based vision requests for multimodal Ollama models such as Gemma 3
 - Web search, weather, and current-information lookups
+- Local planning with reusable task lists
 - Open apps, sites, browser searches, and search results
 - Send coding tasks to Codex CLI and hear a short spoken completion summary
 - Play and control music in YouTube Music Web
@@ -20,30 +21,24 @@ Alfred is a local voice assistant for Windows. It combines speech recognition, a
 
 ## Models and AI Components
 
-- LLM: `gemma3:12b` via Ollama by default
+- LLM: `gemma4:12b` via Ollama by default
 - Main STT: `faster-whisper` with Whisper `small`
 - Knock listener STT: `faster-whisper` with Whisper `tiny` by default
 - VAD: `snakers4/silero-vad`
-- TTS: `Piper`
+- TTS: `OmniVoice`
 - Image generation: `Tongyi-MAI/Z-Image-Turbo`
 
 ## TTS Languages
 
-Alfred uses Piper for speech synthesis only.
+Alfred uses OmniVoice for speech synthesis only.
 
-It automatically discovers installed Piper voices from `piper-voices/` and switches between them in real time based on the language of the current assistant reply.
-
-Supported Piper language folders in the current repository layout:
-
-`ar`, `bg`, `ca`, `cs`, `cy`, `da`, `de`, `el`, `en`, `es`, `fa`, `fi`, `fr`, `hi`, `hu`, `id`, `is`, `it`, `ka`, `kk`, `lb`, `lv`, `ml`, `ne`, `nl`, `no`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `sr`, `sv`, `sw`, `te`, `tr`, `uk`, `vi`, `zh`
-
-If a detected language is unavailable, Alfred falls back to the closest installed Piper voice and then to English.
+It switches languages in real time based on the detected reply language. If a detected language is unavailable in OmniVoice, Alfred falls back to the closest supported language and then to English.
 
 ## Language Support
 
 - Text conversation depends on the capabilities of your Ollama model
 - Voice input is multilingual through Whisper
-- Voice output follows the installed Piper voices
+- Voice output follows OmniVoice language support
 - Default wake words include `Alfred` and `Альфред`
 
 ## Requirements
@@ -69,7 +64,7 @@ Manual setup:
 2. Create and activate a Python environment.
 3. Install the dependencies.
 4. Install and set up Ollama.
-5. Initialize or update the `piper-voices` submodule if needed.
+5. Install the Python dependencies.
 
 Example:
 
@@ -80,7 +75,7 @@ git submodule update --init --recursive
 python -m venv .venv
 .venv\Scripts\activate
 pip install -U pip
-pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers accelerate safetensors faster-whisper piper-tts silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
+pip install ollama sounddevice soundfile numpy torch torchvision torchaudio diffusers transformers accelerate safetensors faster-whisper omnivoice silero av ctranslate2 triton-windows langdetect opencv-python comtypes pillow
 ```
 
 If you already cloned the repository without submodules, run:
@@ -102,6 +97,18 @@ Or:
 ```powershell
 run_alfred.bat
 ```
+
+Core plus separate input windows:
+
+```powershell
+run_alfred.bat
+start_chat.bat
+start_voice.bat
+```
+
+`run_alfred.bat` starts the Alfred core window with logs and replies.
+`start_chat.bat` opens a separate text chat console that connects to the running core.
+`start_voice.bat` opens a separate voice-input console that connects to the running core.
 
 Lightweight knock listener:
 
@@ -127,13 +134,13 @@ Remove Windows autostart for the knock listener:
 knock_listener\uninstall_startup.bat
 ```
 
-On startup Alfred prints the detected Piper TTS languages so you can confirm what is available in your local `piper-voices/` directory.
+On startup Alfred prints the detected OmniVoice-supported TTS languages so you can confirm what is available in the current backend.
 
 ## Lightweight Knock Listener
 
 The repository includes a separate lightweight background listener based on `faster-whisper` plus Silero VAD.
 
-- It is much lighter than the full Alfred stack because it does not load Ollama, Piper, or image models
+- It is much lighter than the full Alfred stack because it does not load Ollama, OmniVoice, or image models
 - It uses a separate ASR model intended only for launch phrases
 - It listens for wake phrases and starts `run_alfred.bat`
 - It does nothing if Alfred is already running
@@ -216,6 +223,19 @@ Examples:
 
 If no camera is available, Alfred falls back to a spoken message that he cannot see anything.
 
+## Planning Commands
+
+Alfred can keep a simple local plan and update it over time.
+
+Examples:
+
+- `make a plan for my week`
+- `show my plan`
+- `add buy groceries to my plan`
+- `complete step 2`
+- `remove step 3`
+- `clear my plan`
+
 ## Codex Support
 
 Alfred can send development tasks to Codex CLI in the current project directory without opening VS Code.
@@ -291,6 +311,6 @@ If you want a longer wake-word follow-up window, increase `ALFRED_WAKE_FOLLOWUP_
 ## Notes
 
 - Music playback uses YouTube Music Web only
-- TTS uses Piper only
+- TTS uses OmniVoice
 - Image generation speed depends heavily on GPU, scheduler, precision, and runtime backend
 - This project is local-first; external access is limited to normal web requests, model downloads, and services you explicitly use

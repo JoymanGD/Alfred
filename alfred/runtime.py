@@ -57,17 +57,85 @@ def ensure_ollama_running(ollama_exe: str):
     print("[OLLAMA] Startup requested, but the server did not respond in time.")
 
 
-def make_ollama_chat(model_name: str):
+def make_ollama_chat(model_name: str, think=None):
     def _ollama_chat(messages):
-        return ollama.chat(model=model_name, messages=messages)
+        kwargs = {"model": model_name, "messages": messages}
+        if think is not None:
+            kwargs["think"] = think
+        return ollama.chat(**kwargs)
 
     return _ollama_chat
+
+
+def build_reply_language_instruction(language: str) -> str:
+    labels = {
+        "ar": "Arabic",
+        "bg": "Bulgarian",
+        "ca": "Catalan",
+        "cs": "Czech",
+        "cy": "Welsh",
+        "da": "Danish",
+        "de": "German",
+        "el": "Greek",
+        "en": "English",
+        "es": "Spanish",
+        "fa": "Persian",
+        "fi": "Finnish",
+        "fr": "French",
+        "hi": "Hindi",
+        "hu": "Hungarian",
+        "id": "Indonesian",
+        "is": "Icelandic",
+        "it": "Italian",
+        "ka": "Georgian",
+        "kk": "Kazakh",
+        "lb": "Luxembourgish",
+        "lv": "Latvian",
+        "ml": "Malayalam",
+        "ne": "Nepali",
+        "nl": "Dutch",
+        "no": "Norwegian",
+        "pl": "Polish",
+        "pt": "Portuguese",
+        "ro": "Romanian",
+        "ru": "Russian",
+        "sk": "Slovak",
+        "sl": "Slovenian",
+        "sr": "Serbian",
+        "sv": "Swedish",
+        "sw": "Swahili",
+        "te": "Telugu",
+        "tr": "Turkish",
+        "uk": "Ukrainian",
+        "vi": "Vietnamese",
+        "zh": "Chinese",
+    }
+    target = labels.get(language, "English")
+    return (
+        f"Reply in {target}. "
+        "Use the language of the user's own request, not the language of quoted text, titles, filenames, URLs, code, or short foreign phrases. "
+        "If the user explicitly asks for another language, follow that request."
+    )
 
 
 def detect_language(text: str) -> str:
     sample = (text or "").strip()
     if not sample:
         return "en"
+
+    explicit_language = _detect_explicit_reply_language(sample)
+    if explicit_language is not None:
+        return explicit_language
+
+    cleaned = _prepare_text_for_language_detection(sample)
+    if len(re.findall(r"\w", cleaned, flags=re.UNICODE)) >= 3:
+        sample = cleaned
+
+    ascii_sample = re.sub(r"\s+", " ", sample)
+    if re.fullmatch(r"[A-Za-z0-9 .,!?()'\":;_/\-]+", ascii_sample):
+        words = re.findall(r"[A-Za-z]+", ascii_sample)
+        if len(words) <= 8:
+            return "en"
 
     if re.search(r"[\u4E00-\u9FFF\u3400-\u4DBF]", sample):
         return "zh"
@@ -152,6 +220,62 @@ def detect_language(text: str) -> str:
             pass
 
     return "en"
+
+
+def _prepare_text_for_language_detection(text: str) -> str:
+    sample = re.sub(r"https?://\S+|www\.\S+", " ", text)
+    sample = re.sub(r"\b[A-Za-z]:\\[^\s]+", " ", sample)
+    sample = re.sub(r"\b[\w.\-]+@[\w.\-]+\.\w+\b", " ", sample)
+    sample = re.sub(r"`[^`]*`", " ", sample)
+    sample = re.sub(r"\"[^\"]*\"", " ", sample)
+    sample = re.sub(r"“[^”]*”", " ", sample)
+    sample = re.sub(r"„[^“]*“", " ", sample)
+    sample = re.sub(r"«[^»]*»", " ", sample)
+    sample = re.sub(r"\[[^\]]*\]", " ", sample)
+    sample = re.sub(r"\([^)]*\)", " ", sample)
+    sample = re.sub(r"\s+", " ", sample).strip()
+    if len(re.findall(r"\w", sample, flags=re.UNICODE)) < 3:
+        return text
+    return sample
+
+
+def _detect_explicit_reply_language(text: str) -> str | None:
+    lowered = text.lower()
+    patterns = {
+        "en": [
+            r"\bin english\b",
+            r"\banswer in english\b",
+            r"\breply in english\b",
+            r"\brespond in english\b",
+            r"\bпо-английски\b",
+            r"\bна английском\b",
+            r"\bанглийською\b",
+            r"\bанглійською\b",
+        ],
+        "ru": [
+            r"\bin russian\b",
+            r"\banswer in russian\b",
+            r"\breply in russian\b",
+            r"\brespond in russian\b",
+            r"\bпо-русски\b",
+            r"\bна русском\b",
+            r"\bросійською\b",
+        ],
+        "uk": [
+            r"\bin ukrainian\b",
+            r"\banswer in ukrainian\b",
+            r"\breply in ukrainian\b",
+            r"\brespond in ukrainian\b",
+            r"\bпо-украински\b",
+            r"\bукраїнською\b",
+            r"\bукраинским\b",
+            r"\bукраинською\b",
+        ],
+    }
+    for language, variants in patterns.items():
+        if any(re.search(pattern, lowered) for pattern in variants):
+            return language
+    return None
 
 
 def normalize_memory_text(text: str) -> str:

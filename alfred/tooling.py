@@ -7,7 +7,9 @@ class ToolContext:
     user_text: str
     language: str
     system_prompt: str
+    recent_history: list[dict[str, str]]
     ollama_chat: Callable[[list[dict[str, str]]], Any]
+    router_ollama_chat: Callable[[list[dict[str, str]]], Any]
     normalize_memory_text: Callable[[str], str]
     detect_language: Callable[[str], str]
     fetch_url: Callable[[str], str]
@@ -16,6 +18,7 @@ class ToolContext:
     analyze_vision: Callable[[str], str] | None = None
     analyze_screen: Callable[[str], str] | None = None
     restart_listener: Callable[[], None] | None = None
+    assistant_control: Callable[..., None] | None = None
     event_out_queue: Any = None
     routed_intent: str | None = None
     routed_tool_name: str | None = None

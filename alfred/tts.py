@@ -1,33 +1,48 @@
-import io
-import os
-import wave
 from dataclasses import dataclass
 from typing import Protocol
 
 import numpy as np
-import soundfile as sf
-from piper import PiperVoice
+import torch
+from omnivoice import OmniVoice
+from omnivoice.utils.lang_map import LANG_IDS
 
-
-QUALITY_PRIORITY = {
-    "medium": 0,
-    "high": 1,
-    "low": 2,
-    "x_low": 3,
-}
 
 LANGUAGE_FALLBACKS = {
+    "ar": "arb",
     "be": "ru",
     "bs": "sr",
+    "ca": "es",
+    "cs": "en",
+    "cy": "en",
+    "fa-ir": "fa",
     "hr": "sr",
+    "hu": "en",
+    "id": "en",
+    "is": "en",
     "ja": "en",
     "ko": "en",
+    "lb": "de",
+    "ml-in": "ml",
+    "ne": "en",
+    "nl-be": "nl",
+    "pt-br": "pt",
+    "pt-pt": "pt",
+    "sl": "sr",
+    "sw": "en",
+    "te-in": "te",
+    "uk-ua": "uk",
+    "vi-vn": "vi",
+    "zh-cn": "zh",
+    "zh-tw": "zh",
 }
 
 
 @dataclass(frozen=True)
 class TTSConfig:
-    piper_voices_dir: str
+    device: str
+    reference_audio_path: str | None = None
+    reference_text: str | None = None
+    voice_instruct: str | None = None
 
 
 class TTSBackend(Protocol):
@@ -37,42 +52,64 @@ class TTSBackend(Protocol):
     def supported_languages(self) -> list[str]:
         ...
 
+    def warmup(self) -> None:
+        ...
 
-class PiperTTSBackend:
+
+class OmniVoiceTTSBackend:
     def __init__(self, config: TTSConfig):
         self.config = config
-        self._voice_paths = self._discover_voice_paths(config.piper_voices_dir)
-        self._voices: dict[str, PiperVoice] = {}
+        self._device = self._resolve_device(config.device)
+        self._reference_audio_path = self._resolve_reference_audio_path(config.reference_audio_path)
+        self._reference_text = (config.reference_text or "").strip() or None
+        self._voice_instruct = (config.voice_instruct or "").strip() or None
+        self._model: OmniVoice | None = None
+        self._supported_languages = set(LANG_IDS)
 
-        if not self._voice_paths:
-            raise RuntimeError(f"No Piper voices were found in: {config.piper_voices_dir}")
+    def supported_languages(self) -> list[str]:
+        return sorted(self._supported_languages)
 
-    def _discover_voice_paths(self, voices_dir: str) -> dict[str, str]:
-        discovered: dict[str, tuple[int, str]] = {}
+    def warmup(self) -> None:
+        self._get_model()
 
-        for root, _, files in os.walk(voices_dir):
-            for file_name in files:
-                if not file_name.endswith(".onnx"):
-                    continue
+    def synthesize(self, text: str, language: str):
+        try:
+            return self._synthesize_once(text, language)
+        except RuntimeError as exc:
+            if self._device.startswith("cuda") and "cuda" in str(exc).lower():
+                print(f"[TTS] OmniVoice CUDA generation failed: {exc}. Falling back to CPU.")
+                self._device = "cpu"
+                self._model = None
+                return self._synthesize_once(text, language)
+            raise
 
-                full_path = os.path.join(root, file_name)
-                relative_path = os.path.relpath(full_path, voices_dir)
-                parts = relative_path.split(os.sep)
-                if not parts:
-                    continue
+    def _synthesize_once(self, text: str, language: str):
+        model = self._get_model()
+        resolved_language = self._resolve_language(language)
+        result = model.generate(
+            text=text,
+            language=resolved_language,
+            ref_audio=self._reference_audio_path,
+            ref_text=self._reference_text,
+            instruct=None if self._reference_audio_path else self._voice_instruct,
+            speed=1.0,
+            normalize_text=False,
+            num_step=16,
+        )
+        audio = self._to_numpy_audio(result[0])
+        return audio, model.sampling_rate
 
-                language = parts[0].lower()
-                if language.startswith("_"):
-                    continue
-
-                quality = parts[-2].lower() if len(parts) >= 2 else ""
-                score = QUALITY_PRIORITY.get(quality, 99)
-                current = discovered.get(language)
-                candidate = (score, full_path)
-                if current is None or candidate < current:
-                    discovered[language] = candidate
-
-        return {language: path for language, (_, path) in discovered.items()}
+    def _get_model(self) -> OmniVoice:
+        if self._model is None:
+            dtype = torch.float16 if self._device.startswith("cuda") else torch.float32
+            print(f"[TTS] Loading OmniVoice on {self._device}...")
+            self._model = OmniVoice.from_pretrained(
+                "k2-fsa/OmniVoice",
+                device_map=self._device,
+                dtype=dtype,
+            )
+            print("[TTS] OmniVoice loaded.")
+        return self._model
 
     def _resolve_language(self, language: str) -> str:
         normalized = (language or "").strip().lower()
@@ -88,7 +125,7 @@ class PiperTTSBackend:
             candidates.append(normalized.split("_", 1)[0])
 
         base_code = normalized.split("-", 1)[0].split("_", 1)[0]
-        fallback = LANGUAGE_FALLBACKS.get(base_code)
+        fallback = LANGUAGE_FALLBACKS.get(normalized) or LANGUAGE_FALLBACKS.get(base_code)
         if fallback:
             candidates.append(fallback)
         candidates.append("en")
@@ -98,36 +135,44 @@ class PiperTTSBackend:
             if candidate in seen:
                 continue
             seen.add(candidate)
-            if candidate in self._voice_paths:
+            if candidate in self._supported_languages:
                 return candidate
 
         return "en"
 
-    def _get_voice(self, language: str) -> PiperVoice:
-        resolved_language = self._resolve_language(language)
-        if resolved_language not in self._voices:
-            voice_path = self._voice_paths[resolved_language]
-            print(f"[TTS] Loading Piper voice for {resolved_language}: {voice_path}")
-            self._voices[resolved_language] = PiperVoice.load(voice_path)
-            print(f"[TTS] Piper voice loaded for {resolved_language}.")
-        return self._voices[resolved_language]
+    @staticmethod
+    def _resolve_device(configured_device: str) -> str:
+        normalized = (configured_device or "").strip().lower()
+        if normalized in {"cpu", "mps"}:
+            return normalized
+        if normalized in {"cuda", "auto", ""} and torch.cuda.is_available():
+            return "cuda:0"
+        return "cpu"
 
-    def supported_languages(self) -> list[str]:
-        return sorted(self._voice_paths.keys())
+    @staticmethod
+    def _resolve_reference_audio_path(reference_audio_path: str | None) -> str | None:
+        candidate = (reference_audio_path or "").strip()
+        if candidate:
+            try:
+                import os
 
-    def synthesize(self, text: str, language: str):
-        tts_voice = self._get_voice(language)
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(22050)
-            tts_voice.synthesize_wav(text, wav_file)
+                if os.path.exists(candidate):
+                    return candidate
+                print(f"[TTS] Reference audio was not found: {candidate}. Using OmniVoice default voice.")
+            except Exception:
+                pass
+        return None
 
-        buffer.seek(0)
-        audio, sample_rate = sf.read(buffer, dtype="float32")
-        return audio, sample_rate
+    @staticmethod
+    def _to_numpy_audio(wav) -> np.ndarray:
+        if isinstance(wav, np.ndarray):
+            audio = wav
+        elif torch.is_tensor(wav):
+            audio = wav.detach().cpu().numpy()
+        else:
+            audio = np.asarray(wav)
+        return np.asarray(audio, dtype=np.float32).reshape(-1)
 
 
 def create_tts_backend(config: TTSConfig) -> TTSBackend:
-    return PiperTTSBackend(config)
+    return OmniVoiceTTSBackend(config)

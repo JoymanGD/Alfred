@@ -74,7 +74,15 @@ class CodexTool(Tool):
             )
             return ToolResult(handled=True, reply_text=reply_text)
 
-        self._watch_codex_process(process, output_file, prompt_file, script_file, context.event_out_queue, language)
+        self._watch_codex_process(
+            process,
+            output_file,
+            prompt_file,
+            script_file,
+            context.event_out_queue,
+            getattr(context, "assistant_control", None),
+            language,
+        )
 
         reply_text = (
             "Запускаю Codex в отдельном окне."
@@ -90,6 +98,7 @@ class CodexTool(Tool):
         prompt_file: str,
         script_file: str,
         event_out_queue,
+        assistant_control,
         language: str,
     ):
         def runner():
@@ -121,6 +130,8 @@ class CodexTool(Tool):
 
             if event_out_queue is not None and reply_text:
                 event_out_queue.put(reply_text)
+            if assistant_control is not None:
+                assistant_control("restart_assistant", wait_for_tts=True, reason="codex_completed")
 
         threading.Thread(target=runner, daemon=True).start()
 
