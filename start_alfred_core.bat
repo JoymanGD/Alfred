@@ -3,8 +3,13 @@ chcp 65001 > nul
 setlocal
 cd /d "%~dp0"
 
-set "ALFRED_OLLAMA_MODEL=gemma4:12b"
-set "ALFRED_ROUTER_OLLAMA_MODEL=qwen3.5:2b"
+if not defined ALFRED_OLLAMA_MODEL set "ALFRED_OLLAMA_MODEL=hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M"
+set "ALFRED_VISION_MODEL=%ALFRED_OLLAMA_MODEL%"
+if not defined ALFRED_VANE_URL set "ALFRED_VANE_URL=http://127.0.0.1:3000"
+if not defined ALFRED_VANE_EMBED_MODEL set "ALFRED_VANE_EMBED_MODEL=nomic-embed-text:latest"
+if not defined ALFRED_SEARXNG_URL set "ALFRED_SEARXNG_URL=http://127.0.0.1:8080"
+set "ALFRED_DECIDER_MODEL=Mapika/decider-4b-GGUF"
+set "ALFRED_DECIDER_GGUF_FILE=decider-4b-v2.1-Q4_K_M.gguf"
 set "ALFRED_IMAGE_MODEL_ID=Tongyi-MAI/Z-Image-Turbo"
 set "ALFRED_IMAGE_TORCH_DTYPE=bf16"
 set "ALFRED_IMAGE_DEVICE=cuda"
@@ -15,6 +20,7 @@ set "ALFRED_IMAGE_GUIDANCE_SCALE=0"
 set "ALFRED_IMAGE_SAMPLER=euler_a"
 set "ALFRED_IMAGE_ATTENTION_BACKEND="
 set "ALFRED_IMAGE_COMPILE=1"
+set "ALFRED_IMAGE_CPU_OFFLOAD=1"
 set "ALFRED_TTS_GAIN=2.8"
 set "ALFRED_TTS_VOICE_INSTRUCT=male, low pitch"
 set "ALFRED_LOG=%~dp0alfred_run.log"
@@ -41,7 +47,9 @@ if errorlevel 1 (
 set "ALFRED_PYTHON=python"
 
 :run_alfred
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start_searxng.ps1"
 echo Starting Alfred with model: %ALFRED_OLLAMA_MODEL%
+echo Camera and screen model: %ALFRED_VISION_MODEL%
 echo Running Python: %ALFRED_PYTHON%
 echo Log file: %ALFRED_LOG%
 echo [%date% %time%] Starting Alfred> "%ALFRED_LOG%"

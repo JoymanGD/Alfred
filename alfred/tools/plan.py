@@ -19,16 +19,7 @@ class PlanTool(Tool):
         self.store = PlanStore(config.storage_path)
 
     def matches(self, context: ToolContext, text: str) -> bool:
-        lowered = text.lower().strip()
-        trigger_patterns = [
-            r"\bplan\b",
-            r"\bto[- ]do\b",
-            r"\btask list\b",
-            r"\bchecklist\b",
-            r"\broadmap\b",
-            r"\bstep\s+\d+\b",
-        ]
-        return any(re.search(pattern, lowered) for pattern in trigger_patterns)
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.language or context.detect_language(text)
@@ -132,19 +123,6 @@ class PlanTool(Tool):
         if routed_action in {"create", "show", "add", "complete", "remove", "clear"}:
             return routed_action
 
-        lowered = text.lower()
-        if any(phrase in lowered for phrase in ["show my plan", "what is my plan", "what's my plan", "list my plan"]):
-            return "show"
-        if any(phrase in lowered for phrase in ["clear my plan", "delete my plan", "reset my plan"]):
-            return "clear"
-        if any(phrase in lowered for phrase in ["complete step", "mark step", "finish step", "done with step"]):
-            return "complete"
-        if any(phrase in lowered for phrase in ["remove step", "delete step"]):
-            return "remove"
-        if any(phrase in lowered for phrase in ["add to my plan", "add a step", "add step"]):
-            return "add"
-        if "plan" in lowered or "checklist" in lowered:
-            return "create"
         return ""
 
     def _extract_goal(self, context: ToolContext, text: str) -> str:

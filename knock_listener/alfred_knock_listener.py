@@ -16,7 +16,7 @@ KNOCK_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = KNOCK_DIR.parent
 LOG_FILE = KNOCK_DIR / "alfred_knock_listener.log"
 LOCK_FILE = KNOCK_DIR / "alfred_knock_listener.lock"
-RUN_SCRIPT = PROJECT_ROOT / "run_alfred.bat"
+RUN_SCRIPT = PROJECT_ROOT / "start_alfred_core.bat"
 
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 512
@@ -459,7 +459,7 @@ def listen_loop(vad_model, asr_model) -> None:
 
 def main() -> None:
     if not RUN_SCRIPT.exists():
-        raise FileNotFoundError(f"run_alfred.bat was not found at {RUN_SCRIPT}")
+        raise FileNotFoundError(f"start_alfred_core.bat was not found at {RUN_SCRIPT}")
 
     LOG_FILE.write_text("", encoding="utf-8")
     write_log("Listener starting.")

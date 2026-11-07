@@ -57,14 +57,52 @@ def ensure_ollama_running(ollama_exe: str):
     print("[OLLAMA] Startup requested, but the server did not respond in time.")
 
 
-def make_ollama_chat(model_name: str, think=None):
+def make_ollama_chat(model_name: str, think=None, options=None):
     def _ollama_chat(messages):
-        kwargs = {"model": model_name, "messages": messages}
+        kwargs = {"model": model_name, "messages": messages, "keep_alive": -1}
         if think is not None:
             kwargs["think"] = think
+        if options is not None:
+            kwargs["options"] = options
         return ollama.chat(**kwargs)
 
+    def _structured_chat(messages):
+        return ollama.chat(
+            model=model_name, messages=messages, keep_alive=-1,
+            think=False, format="json", options={"temperature": 0, "seed": 42},
+        )
+
+    _ollama_chat.structured = _structured_chat
     return _ollama_chat
+
+
+def preload_ollama_model(model_name: str, options=None):
+    print(f"[LLM] Loading Ollama model: {model_name}...")
+    ollama.generate(model=model_name, prompt="", keep_alive=-1, options=options)
+    print(f"[LLM] Ollama model ready: {model_name}")
+
+
+def warmup_ollama_chat(model_name: str, system_prompt: str):
+    print(f"[LLM] Warming chat inference: {model_name}...")
+    response = ollama.chat(
+        model=model_name,
+        messages=[
+            {
+                "role": "system",
+                "content": f"{system_prompt}\n{build_reply_language_instruction('en')}",
+            },
+            {"role": "user", "content": "Reply with OK."},
+        ],
+        keep_alive=-1,
+    )
+    load_seconds = (response.get("load_duration") or 0) / 1_000_000_000
+    prefill_seconds = (response.get("prompt_eval_duration") or 0) / 1_000_000_000
+    decode_seconds = (response.get("eval_duration") or 0) / 1_000_000_000
+    print(
+        f"[LLM] Chat inference warmed: load={load_seconds:.3f}s, "
+        f"prefill={prefill_seconds:.3f}s, decode={decode_seconds:.3f}s, "
+        f"output_tokens={response.get('eval_count') or 0}."
+    )
 
 
 def build_reply_language_instruction(language: str) -> str:
@@ -161,7 +199,7 @@ def detect_language(text: str) -> str:
             return "sr"
         if re.search(r"[әғқңөүұһі]", lowered):
             return "kk"
-        if re.search(r"[ѝъщ]", lowered):
+        if re.search(r"[ѝ]", lowered):
             return "bg"
         return "ru"
 
@@ -282,7 +320,7 @@ def normalize_memory_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def fetch_url(url: str) -> str:
+def fetch_url(url: str, *, timeout: float | None = None, attempts: int = 3) -> str:
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -296,10 +334,10 @@ def fetch_url(url: str) -> str:
         "Connection": "close",
     }
     last_error = None
-    for attempt in range(3):
+    for attempt in range(max(1, attempts)):
         request = Request(url, headers=headers)
         try:
-            with urlopen(request, timeout=10 + attempt * 5) as response:
+            with urlopen(request, timeout=timeout if timeout is not None else 10 + attempt * 5) as response:
                 return response.read().decode("utf-8", errors="replace")
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
             last_error = exc

@@ -23,10 +23,7 @@ class CodexTool(Tool):
         self.config = config
 
     def matches(self, context: ToolContext, text: str) -> bool:
-        lowered = text.lower().strip()
-        trigger_terms = ["codex", "кодекс", "кодексу", "кодекса"]
-        action_terms = ["ask", "tell", "request", "попроси", "спроси", "запроси"]
-        return any(term in lowered for term in trigger_terms) and any(term in lowered for term in action_terms)
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         query = (

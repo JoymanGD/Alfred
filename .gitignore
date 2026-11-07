@@ -6,6 +6,8 @@ __pycache__/
 
 .ytmd_companion_token
 generated.png
+.alfred_state/
+.local_services/
 knock_listener/alfred_knock_listener.log
 knock_listener/alfred_knock_listener.lock
 

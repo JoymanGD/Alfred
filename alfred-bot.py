@@ -14,7 +14,7 @@ from alfred.agent import AgentConfig, agent_loop, build_tool_registry
 from alfred.audio import AudioEngine, speaker_loop
 from alfred.config import load_config
 from alfred.conversation import ConversationMemory
-from alfred.input import DEFAULT_HOST, DEFAULT_PORT, LocalInputServer, RemoteInputClient
+from alfred.input import DEFAULT_HOST, DEFAULT_PORT, LocalInputServer, RemoteInputClient, wait_for_chat_playback
 from alfred.listen import mic_listener
 from alfred.runtime import (
     detect_language,
@@ -23,9 +23,15 @@ from alfred.runtime import (
     fetch_url,
     make_ollama_chat,
     normalize_memory_text,
+    preload_ollama_model,
+    warmup_ollama_chat,
 )
 from alfred.services import ModelServices
+from alfred.decider import IntentDecider
+from alfred.addressing import VoiceAddressGate
+from alfred.extended_actions import OcrEngine
 from alfred.screen import analyze_screen_request
+from alfred.startup import preload_components
 from alfred.tts import TTSConfig, create_tts_backend
 from alfred.vision import VisionConfig, analyze_vision_request
 
@@ -75,7 +81,13 @@ tts_playing_event = threading.Event()
 
 
 ollama_chat = make_ollama_chat(config.ollama_model)
-router_ollama_chat = make_ollama_chat(config.router_ollama_model, think=False)
+vision_ollama_options = {"num_gpu": config.vision_gpu_layers, "num_ctx": 2048, "temperature": 0}
+vision_ollama_chat = make_ollama_chat(
+    config.vision_model,
+    think=False,
+    options=vision_ollama_options if config.vision_model != config.ollama_model else None,
+)
+decider = IntentDecider(config.decider_model, config.decider_gguf_file, config.decider_n_ctx)
 services = ModelServices(config)
 conversation_memory = ConversationMemory(config.max_history_messages, normalize_memory_text)
 tts_backend = create_tts_backend(
@@ -90,18 +102,24 @@ audio_engine = AudioEngine(tts_backend, detect_language, config.tts_gain)
 tts_languages = ", ".join(tts_backend.supported_languages())
 
 
+ocr_engine = OcrEngine()
 agent_config = AgentConfig(
     base_dir=config.base_dir,
     codex_exe=config.codex_exe,
     system_prompt=config.system_prompt,
-    ru_weather_words=config.ru_weather_words,
-    ru_search_words=config.ru_search_words,
-    ru_fact_words=config.ru_fact_words,
     plan_storage_path=config.plan_storage_path,
+    vane_url=config.vane_url,
+    vane_chat_model=config.ollama_model,
+    vane_embedding_model=config.vane_embedding_model,
+    vane_timeout=config.vane_timeout,
+    searxng_url=config.searxng_url,
+    ocr_engine=ocr_engine,
     vision_config=VisionConfig(
         enabled=config.camera_enabled,
         camera_indexes=config.camera_indexes,
         warmup_frames=config.camera_warmup_frames,
+        width=config.camera_width,
+        height=config.camera_height,
     ),
 )
 tool_registry = build_tool_registry(agent_config)
@@ -115,9 +133,8 @@ def analyze_vision_payload(prompt: str):
     return analyze_vision_request(
         text=prompt,
         config=agent_config.vision_config,
-        ollama_chat=ollama_chat,
+        ollama_chat=vision_ollama_chat,
         normalize_text=normalize_memory_text,
-        system_prompt=config.system_prompt,
         language=detect_language(prompt),
     )
 
@@ -125,9 +142,8 @@ def analyze_vision_payload(prompt: str):
 def analyze_screen_payload(prompt: str):
     return analyze_screen_request(
         text=prompt,
-        ollama_chat=ollama_chat,
+        ollama_chat=vision_ollama_chat,
         normalize_text=normalize_memory_text,
-        system_prompt=config.system_prompt,
         language=detect_language(prompt),
     )
 
@@ -249,6 +265,7 @@ def console_chat_loop(input_sink, followup_queue=None):
     print("[CHAT] Type a message for Alfred and press Enter.")
     print("[CHAT] Commands: /wake, /quit")
     print()
+    last_reply_id = 0
     while True:
         try:
             user_text = input("You> ").strip()
@@ -268,13 +285,18 @@ def console_chat_loop(input_sink, followup_queue=None):
             input_sink.trigger_wake()
             continue
 
+        if followup_queue is not None:
+            while True:
+                try:
+                    signal = followup_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if isinstance(signal, tuple):
+                    last_reply_id = max(last_reply_id, signal[1])
         input_sink.submit_text(normalize_memory_text(user_text))
         print()
         if followup_queue is not None:
-            while True:
-                signal = followup_queue.get()
-                if signal == "assistant_replied":
-                    break
+            last_reply_id = wait_for_chat_playback(followup_queue, last_reply_id)
 
 
 def configure_cuda():
@@ -287,7 +309,7 @@ def configure_cuda():
 def print_core_banner():
     image_device = services.get_image_device()
     print(f"[LLM] Using Ollama model: {config.ollama_model}")
-    print(f"[ROUTER] Using Ollama model: {config.router_ollama_model}")
+    print(f"[ROUTER] Using Decider model: {config.decider_model}, file={config.decider_gguf_file}, n_ctx={config.decider_n_ctx}")
     print(f"[OLLAMA] Executable path: {config.ollama_exe}")
     print(f"[ASR] Whisper config: model={config.whisper_model}, compute_type={config.whisper_compute_type}")
     print(
@@ -308,10 +330,11 @@ def print_core_banner():
         f"[IMAGE] Model: {config.image_model_id}, dtype={config.image_torch_dtype}, "
         f"device={image_device}, steps={config.image_steps}, cfg={config.image_guidance_scale}, "
         f"size={config.image_width}x{config.image_height}, sampler={config.image_sampler}, "
-        f"attention_backend={config.image_attention_backend or 'default'}, compile={config.image_compile}"
+        f"attention_backend={config.image_attention_backend or 'default'}, "
+        f"compile={config.image_compile}, cpu_offload={config.image_cpu_offload}"
     )
     print(
-        f"[VISION] Camera enabled={config.camera_enabled}, "
+        f"[VISION] Model={config.vision_model}, GPU layers={config.vision_gpu_layers}, camera enabled={config.camera_enabled}, "
         f"indexes={config.camera_indexes}, warmup_frames={config.camera_warmup_frames}"
     )
     print("[MUSIC] Backend: YouTube Music Web")
@@ -323,14 +346,28 @@ def start_core(host: str, port: int):
     configure_cuda()
     print_core_banner()
 
+    ready_event = threading.Event()
     input_server = LocalInputServer(
         event_in=event_in,
         tts_interrupt_event=tts_interrupt_event,
         host=host,
         port=port,
         tts_warmup_callback=audio_engine.warmup_tts,
+        ready_event=ready_event,
+        voice_address_gate=VoiceAddressGate(decider, conversation_memory),
     )
     input_server.start()
+    try:
+        preload_components(
+            decider, config.ollama_model, preload_ollama_model, audio_engine,
+            ocr_engine, vision_model=config.vision_model,
+            vision_options=vision_ollama_options,
+        )
+        warmup_ollama_chat(config.ollama_model, config.system_prompt)
+    except Exception as exc:
+        print(f"[START] Core startup failed: {exc}")
+        input_server.mark_failed(str(exc))
+        return
     threading.Thread(
         target=assistant_control_loop,
         args=(assistant_control_queue, tts_playing_event),
@@ -346,7 +383,7 @@ def start_core(host: str, port: int):
             conversation_memory,
             agent_config,
             ollama_chat,
-            router_ollama_chat,
+            decider,
             normalize_memory_text,
             detect_language,
             fetch_url,
@@ -369,6 +406,7 @@ def start_core(host: str, port: int):
         ),
         daemon=True,
     ).start()
+    input_server.mark_ready()
     print("[START] Core agent, TTS, and remote input server started.")
 
 
@@ -385,6 +423,11 @@ def start_chat_client(host: str, port: int):
     except OSError as e:
         print(f"[CHAT] Failed to connect to Alfred core: {e}")
         raise SystemExit(1) from e
+    try:
+        client.wait_until_ready()
+    except RuntimeError as exc:
+        print(f"[CHAT] {exc}")
+        raise SystemExit(1) from exc
     console_chat_loop(client, followup_signal_queue)
 
 
@@ -402,10 +445,15 @@ def start_voice_client(host: str, port: int):
     except OSError as e:
         print(f"[VOICE] Failed to connect to Alfred core: {e}")
         raise SystemExit(1) from e
+    try:
+        client.wait_until_ready()
+    except RuntimeError as exc:
+        print(f"[VOICE] {exc}")
+        raise SystemExit(1) from exc
 
     print(
         f"[VOICE] Whisper config: model={config.whisper_model}, compute_type={config.whisper_compute_type}, "
-        f"wake_followup={config.wake_followup_seconds:.2f}s"
+        f"conversation_context={config.conversation_context_seconds:.2f}s"
     )
     mic_listener(
         client,
@@ -414,11 +462,10 @@ def start_voice_client(host: str, port: int):
         config.min_speech_seconds,
         config.end_silence_seconds,
         config.pre_speech_seconds,
-        config.wake_followup_seconds,
+        config.conversation_context_seconds,
         tts_playing_event,
         followup_signal_queue,
         restart_listener_queue,
-        config.wake_words,
         config.asr_hotwords,
         normalize_memory_text,
     )

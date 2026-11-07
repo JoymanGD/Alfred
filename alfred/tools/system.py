@@ -7,49 +7,19 @@ import time
 import webbrowser
 import ctypes
 import winsound
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus, unquote
 
 from alfred.tooling import Tool, ToolContext, ToolResult
-
-
-@dataclass
-class SystemToolConfig:
-    app_aliases: dict[str, str]
+from alfred.running_windows import list_running_windows
 
 
 class SystemTool(Tool):
     name = "system"
     AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
-    FILE_TYPE_ALIASES = {
-        "audio": AUDIO_EXTENSIONS,
-        "sound": AUDIO_EXTENSIONS,
-        "music": AUDIO_EXTENSIONS,
-        "image": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"},
-        "picture": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"},
-        "photo": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"},
-        "video": {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm"},
-        "document": {".pdf", ".doc", ".docx", ".txt", ".rtf", ".md"},
-        "text": {".txt", ".md", ".rtf"},
-        "pdf": {".pdf"},
-        "code": {".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".html", ".css", ".md"},
-        "archive": {".zip", ".rar", ".7z", ".tar", ".gz"},
-    }
-
-    def __init__(self, config: SystemToolConfig):
-        self.config = config
-
     def matches(self, context: ToolContext, text: str) -> bool:
-        lowered = text.lower().strip()
-        patterns = [
-            r"^(?:open|launch|start|run)\s+.+",
-            r"^(?:открой|запусти)\s+.+",
-            r"^(?:list|show|find)\s+.+\bfiles?\b.*",
-            r"^(?:найди|покажи|список)\s+.+\bфайл",
-        ]
-        return any(re.search(pattern, lowered) for pattern in patterns)
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.language or context.detect_language(text)
@@ -83,32 +53,25 @@ class SystemTool(Tool):
             reply_text = "РџРµСЂРµР·Р°РіСЂСѓР¶Р°СЋ РєРѕРјРїСЊСЋС‚РµСЂ." if language == "ru" else "Restarting the computer."
             return ToolResult(handled=True, reply_text=reply_text)
 
-        browser_query = (
-            context.routed_query
-            if context.routed_intent == "browser_open" and context.routed_query
-            else self._extract_browser_search_query(text)
-        )
+        browser_query = (context.routed_query or "").strip() if context.routed_intent == "browser_open" else ""
+        if context.routed_intent == "browser_open" and not browser_query:
+            reply_text = "Что открыть в браузере?" if language == "ru" else "What should I open in the browser?"
+            return ToolResult(handled=True, reply_text=reply_text)
         if browser_query:
             opened_target = self._open_browser_search_target(context, browser_query)
             reply_text = self._build_browser_search_reply(language, browser_query, opened_target)
             return ToolResult(handled=True, reply_text=reply_text, target=opened_target)
 
-        target = (
-            context.routed_query
-            if context.routed_intent == "system_open" and context.routed_query
-            else self._extract_target(text)
-        )
+        target = (context.routed_query or "").strip()
+        if routed_action == "close_application" and not (context.routed_args or {}).get("process_id"):
+            reply_text = "Уточни, какое открытое приложение закрыть." if language == "ru" else "Which open app should I close?"
+            return ToolResult(handled=True, reply_text=reply_text)
         if not target:
             reply_text = (
                 "Я не понял, что именно нужно открыть."
                 if language == "ru"
                 else "I could not tell what you want me to open."
             )
-            return ToolResult(handled=True, reply_text=reply_text)
-
-        list_request = self._build_file_list_request(text, target, location_hint)
-        if list_request is not None:
-            reply_text = self._handle_file_list_request(language, list_request["root"], list_request["extensions"])
             return ToolResult(handled=True, reply_text=reply_text)
 
         if routed_action != "close_application" and self._should_treat_as_file(target, target_kind):
@@ -127,9 +90,13 @@ class SystemTool(Tool):
 
         try:
             if routed_action == "close_application":
-                closed = self._close_target(target, location_hint=location_hint)
+                closed = self._close_target(
+                    target,
+                    int((context.routed_args or {})["process_id"]),
+                    str((context.routed_args or {})["process_name"]),
+                )
                 reply_text = self._build_close_reply(language, target, closed)
-                return ToolResult(handled=True, reply_text=reply_text, target=closed or target)
+                return ToolResult(handled=True, reply_text=reply_text, target=closed)
 
             opened = self._open_target(target, location_hint=location_hint)
             reply_text = self._build_reply(language, target, opened)
@@ -150,40 +117,6 @@ class SystemTool(Tool):
             return
         if action == "shutdown_assistant":
             self._schedule_alfred_shutdown()
-
-    def _extract_browser_search_query(self, text: str) -> str | None:
-        patterns = [
-            r"^(?:open|launch|start)\s+(?:in\s+browser|in\s+the\s+browser)\s+(.+)",
-            r"^(?:open|launch|start)\s+(.+?)\s+(?:in\s+browser|in\s+the\s+browser)$",
-            r"^(?:открой|запусти)\s+(?:в\s+браузере)\s+(.+)",
-            r"^(?:открой|запусти)\s+(.+?)\s+в\s+браузере$",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
-                return self._normalize_browser_search_query(match.group(1))
-        return None
-
-    def _normalize_browser_search_query(self, query: str) -> str:
-        normalized = query.strip(" ?!.,")
-        prefix_patterns = [
-            r"^(?:page|website|site)\s+(?:with|about|for)\s+",
-            r"^(?:page|website|site)\s+",
-            r"^(?:страницу|сайт)\s+(?:с|о|про)\s+",
-            r"^(?:страницу|сайт)\s+",
-        ]
-        for pattern in prefix_patterns:
-            normalized = re.sub(pattern, "", normalized, flags=re.IGNORECASE).strip(" ?!.,")
-
-        filler_patterns = [
-            r"\b(?:please|me)\b",
-            r"\b(?:мне|пожалуйста)\b",
-        ]
-        for pattern in filler_patterns:
-            normalized = re.sub(pattern, " ", normalized, flags=re.IGNORECASE)
-
-        normalized = re.sub(r"\s+", " ", normalized).strip(" ?!.,")
-        return normalized
 
     def _build_browser_search_url(self, query: str) -> str:
         return f"https://www.google.com/search?q={quote_plus(query)}"
@@ -218,22 +151,7 @@ class SystemTool(Tool):
             return resolved_url
         return None
 
-    def _extract_target(self, text: str) -> str:
-        patterns = [
-            r"^(?:open|launch|start|run)\s+(.+)",
-            r"^(?:открой|запусти)\s+(.+)",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
-                return match.group(1).strip(" ?!.,")
-        return text.strip(" ?!.,")
-
     def _resolve_target(self, target: str, location_hint: str = "") -> str:
-        lowered = target.lower().strip()
-        if lowered in self.config.app_aliases:
-            return self.config.app_aliases[lowered]
-
         file_target = self._find_file_target(target, location_hint=location_hint)
         if file_target:
             return file_target
@@ -304,46 +222,25 @@ class SystemTool(Tool):
     def _is_audio_file(self, path: str) -> bool:
         return Path(path).suffix.lower() in self.AUDIO_EXTENSIONS
 
-    def _close_target(self, target: str, location_hint: str = "") -> str | None:
-        resolved = self._resolve_target(target, location_hint=location_hint)
-        candidates = self._build_process_name_candidates(target, resolved)
-        for process_name in candidates:
-            result = subprocess.run(
-                ["taskkill", "/IM", process_name, "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                check=False,
-            )
-            if result.returncode == 0:
-                return process_name
-
-        visible_name = self._extract_process_basename(resolved) or target.strip()
+    def _close_target(self, target: str, pid: int, process_name: str) -> str | None:
+        current = next(
+            (window for window in list_running_windows() if window["pid"] == pid and window["name"] == process_name),
+            None,
+        )
+        if current is None:
+            print(f"[SYSTEM] Selected app is no longer open: {target!r}, pid={pid}")
+            return None
         result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                (
-                    "$target = "
-                    + repr(target)
-                    + "; "
-                    + "$name = "
-                    + repr(visible_name)
-                    + "; "
-                    + "Get-Process | Where-Object { "
-                    + "$_.MainWindowTitle -like ('*' + $target + '*') -or "
-                    + "$_.ProcessName -like ('*' + $name + '*') "
-                    + "} | Stop-Process -Force"
-                ),
-            ],
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             check=False,
         )
         if result.returncode == 0:
-            return visible_name
+            print(f"[SYSTEM] Closed selected app: {target!r}, pid={pid}")
+            return process_name
+        print(f"[SYSTEM] Failed to close selected app: {target!r}, pid={pid}, exit={result.returncode}")
         return None
 
     def _find_file_target(self, target: str, location_hint: str = "") -> str | None:
@@ -451,93 +348,6 @@ class SystemTool(Tool):
             return True
         return self._looks_like_file_target(target)
 
-    def _build_file_list_request(self, text: str, target: str, location_hint: str) -> dict | None:
-        combined = f"{text} {target}".lower()
-        if not re.search(r"\b(list|show|find|what)\b", combined):
-            return None
-        if "file" not in combined and "files" not in combined:
-            if not any(term in combined for term in ["type", "extension", "format", "audio", "sound", "music", "document", "image", "picture", "photo", "video", "code", "pdf", "text", "archive"]):
-                return None
-
-        extensions = self._extract_requested_extensions(text, target)
-        if extensions is None:
-            return None
-
-        roots = self._candidate_search_roots(location_hint or self._infer_location_hint_from_text(text))
-        if not roots:
-            return None
-        root = roots[0]
-        return {"root": root, "extensions": extensions}
-
-    def _extract_requested_extensions(self, text: str, target: str) -> set[str] | None:
-        combined = f"{text} {target}".lower()
-
-        explicit_extensions = {
-            f".{match.lower()}"
-            for match in re.findall(r"(?:^|[^a-z0-9])\.([a-z0-9]{1,8})(?:[^a-z0-9]|$)", combined)
-        }
-        if explicit_extensions:
-            return explicit_extensions
-
-        file_name_match = re.search(r"([a-z0-9_()\-\[\] ]+\.[a-z0-9]{1,8})", combined, flags=re.IGNORECASE)
-        if file_name_match:
-            suffix = Path(file_name_match.group(1).strip()).suffix.lower()
-            if suffix:
-                return {suffix}
-
-        for alias, extensions in self.FILE_TYPE_ALIASES.items():
-            if re.search(rf"\b{re.escape(alias)}(?:s)?\b", combined):
-                return set(extensions)
-
-        if "this type" in combined or "same type" in combined:
-            inferred_name = self._extract_filename(target) or self._extract_filename(text)
-            if inferred_name:
-                suffix = Path(inferred_name).suffix.lower()
-                if suffix:
-                    return {suffix}
-        return None
-
-    def _infer_location_hint_from_text(self, text: str) -> str:
-        lowered = text.lower()
-        if "desktop" in lowered:
-            return "desktop"
-        if "documents" in lowered:
-            return "documents"
-        if "downloads" in lowered:
-            return "downloads"
-        if "music" in lowered:
-            return "music"
-        return ""
-
-    def _handle_file_list_request(self, language: str, root: Path, extensions: set[str]) -> str:
-        if not root.exists():
-            if language == "ru":
-                return f"Не нашел папку {root}."
-            return f"I could not find the folder {root}."
-
-        matches: list[Path] = []
-        try:
-            for child in root.iterdir():
-                if child.is_file() and child.suffix.lower() in extensions:
-                    matches.append(child)
-        except OSError as exc:
-            if language == "ru":
-                return f"Не удалось просмотреть {root}: {exc}"
-            return f"I could not inspect {root}: {exc}"
-
-        matches.sort(key=lambda item: item.name.lower())
-        if not matches:
-            if language == "ru":
-                return f"Не нашел аудиофайлы в {root}."
-            return f"I could not find any audio files in {root}."
-
-        preview = ", ".join(path.name for path in matches[:12])
-        if len(matches) > 12:
-            preview += f", and {len(matches) - 12} more"
-        if language == "ru":
-            return f"Нашел {len(matches)} аудиофайлов в {root}: {preview}."
-        return f"I found {len(matches)} audio files in {root}: {preview}."
-
     def _build_file_not_found_reply(
         self,
         language: str,
@@ -578,25 +388,6 @@ class SystemTool(Tool):
         )
         return lowered.endswith(media_extensions)
 
-    def _build_process_name_candidates(self, target: str, resolved: str) -> list[str]:
-        candidates: list[str] = []
-        for value in (resolved, target):
-            process_name = self._extract_process_basename(value)
-            if process_name and process_name not in candidates:
-                candidates.append(process_name)
-        return candidates
-
-    def _extract_process_basename(self, value: str) -> str | None:
-        if not value:
-            return None
-        cleaned = value.strip().strip("\"'")
-        base_name = os.path.basename(cleaned)
-        if not base_name:
-            return None
-        if "." not in base_name:
-            base_name = f"{base_name}.exe"
-        return base_name
-
     def _find_steam_game_target(self, target: str) -> str | None:
         normalized_target = self._normalize_match_key(target)
         if not normalized_target:
@@ -636,14 +427,20 @@ class SystemTool(Tool):
             print(f"[SYSTEM] Matched installed app exactly: {exact[0]['name']}")
             return exact[0]["path"]
 
-        partial = [
-            candidate
-            for candidate in candidates
-            if normalized_target in candidate["normalized_name"] or candidate["normalized_name"] in normalized_target
-        ]
+        partial = []
+        for candidate in candidates:
+            name = candidate["normalized_name"]
+            if len(name.replace(" ", "")) < 3:
+                continue
+            if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", normalized_target) or (
+                len(normalized_target) >= 3
+                and re.search(rf"(?<!\w){re.escape(normalized_target)}(?!\w)", name)
+            ):
+                partial.append(candidate)
         if partial:
-            print(f"[SYSTEM] Matched installed app partially: {partial[0]['name']}")
-            return partial[0]["path"]
+            best_match = max(partial, key=lambda candidate: len(candidate["normalized_name"]))
+            print(f"[SYSTEM] Matched installed app partially: {best_match['name']}")
+            return best_match["path"]
 
         names = [candidate["normalized_name"] for candidate in candidates]
         close = difflib.get_close_matches(normalized_target, names, n=1, cutoff=0.74)
@@ -725,18 +522,6 @@ class SystemTool(Tool):
                 if path.name.lower().startswith(("uninstall", "деинсталлировать")):
                     continue
                 self._append_candidate(candidates, seen_paths, path.stem, str(path))
-
-        common_execs = [
-            ("steam", os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Steam", "Steam.exe")),
-            ("discord", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Discord", "Update.exe")),
-            ("telegram", os.path.join(os.environ.get("APPDATA", ""), "Telegram Desktop", "Telegram.exe")),
-            ("chrome", os.path.join(os.environ.get("ProgramFiles", ""), "Google", "Chrome", "Application", "chrome.exe")),
-            ("vscode", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Microsoft VS Code", "Code.exe")),
-            ("obsidian", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Obsidian", "Obsidian.exe")),
-        ]
-        for name, path in common_execs:
-            if path and os.path.exists(path):
-                self._append_candidate(candidates, seen_paths, name, path)
 
         return tuple(candidates)
 

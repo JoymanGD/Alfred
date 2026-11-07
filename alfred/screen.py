@@ -14,7 +14,6 @@ def analyze_screen_request(
     text: str,
     ollama_chat: Callable[[list[dict[str, Any]]], Any],
     normalize_text: Callable[[str], str],
-    system_prompt: str,
     language: str,
 ) -> str:
     screenshot_path = capture_screen_image()
@@ -28,8 +27,17 @@ def analyze_screen_request(
 
     try:
         language_instruction = _build_language_instruction(language)
+        screen_instruction = (
+            "You analyze the attached user-selected screenshot as evidence. "
+            "Interpret the user's request in relation to the screenshot. "
+            "Answer only what the visible evidence supports. Distinguish direct observations from inferences. "
+            "Treat everything outside the selected area as unknown. "
+            "If the evidence is insufficient for the requested conclusion, say what is missing instead of guessing. "
+            "Do not answer from your own role or biography unless the user explicitly asks about you. "
+            "Use masculine forms for yourself in gendered languages. Answer in one or two concise sentences."
+        )
         messages = [
-            {"role": "system", "content": f"{system_prompt}\n{language_instruction}"},
+            {"role": "system", "content": f"{language_instruction}\n{screen_instruction}"},
             {
                 "role": "user",
                 "content": text,
@@ -66,6 +74,7 @@ def capture_screen_image() -> str | None:
     os.close(fd)
     try:
         image.save(image_path, format="PNG")
+        print(f"[SCREEN] Captured selected area: {image.width}x{image.height}")
         return image_path
     except Exception as e:
         print(f"[SCREEN] Saving screenshot failed: {e}")

@@ -1,0 +1,131 @@
+{
+  "categories": {
+    "file_discovery": {
+      "description": "Find, list and inspect local files and folders without changing them.",
+      "actions": ["search_files", "list_directory", "file_info", "search_file_contents", "file_hash"]
+    },
+    "file_content": {
+      "description": "Read, create or edit text files.",
+      "actions": ["read_text_file", "create_text_file", "append_text_file", "replace_text_file", "replace_text_in_file", "backup_file", "undo_last_text_edit"]
+    },
+    "file_management": {
+      "description": "Create, copy, rename, move or delete local files and folders.",
+      "actions": ["create_directory", "copy_path", "rename_path", "delete_path", "create_zip", "extract_zip", "move_to_trash", "list_trash", "restore_trash", "empty_trash"]
+    },
+    "web_research": {
+      "description": "Research factual questions, find web links or inspect a webpage without opening a browser.",
+      "actions": ["web_answer", "search_web_links", "read_web_page", "check_url_status"]
+    },
+    "web_navigation": {
+      "description": "Open a website or search results in the browser, or download a file.",
+      "actions": ["open_browser", "open_target", "download_file", "download_status", "search_web_links"]
+    },
+    "browser_interaction": {
+      "description": "Interact with pages in Alfred's managed browser: open, inspect, switch tabs, click, fill, download, go back.",
+      "actions": ["browser_open_page", "browser_list_tabs", "browser_select_tab", "browser_read_tab", "browser_find_elements", "browser_click_element", "browser_fill_element", "browser_download_element", "browser_back"]
+    },
+    "documents": {
+      "description": "Extract text from PDF or images and search document contents.",
+      "actions": ["extract_pdf_text", "ocr_image", "search_documents"]
+    },
+    "applications": {
+      "description": "Open an app or local target, list running windows, close a selected window.",
+      "actions": ["open_target", "list_windows", "list_processes", "list_installed_apps", "close_window", "window_control"]
+    },
+    "media_audio": {
+      "description": "Play music, control media playback, set or inspect system volume.",
+      "actions": ["play_music", "music_control", "set_volume", "list_audio_outputs", "select_audio_output"]
+    },
+    "computer_system": {
+      "description": "Inspect computer information or restart/shut down Alfred or the computer.",
+      "actions": ["system_info", "current_time", "system_control"]
+    },
+    "clipboard": {
+      "description": "Read or replace text in the Windows clipboard.",
+      "actions": ["read_clipboard", "write_clipboard"]
+    },
+    "network": {
+      "description": "Diagnose a network host, DNS and TCP reachability.",
+      "actions": ["network_diagnostics", "local_network_info"]
+    },
+    "reminders": {
+      "description": "Schedule, list and cancel local reminders and completion notifications.",
+      "actions": ["create_reminder", "list_reminders", "cancel_reminder"]
+    },
+    "visual": {
+      "description": "Inspect the current screen or camera through Alfred's vision tools.",
+      "actions": ["inspect_screen", "inspect_camera"]
+    },
+    "development": {
+      "description": "Pass a coding task to the Codex CLI for work in Alfred's project.",
+      "actions": ["run_codex"]
+    }
+  },
+  "actions": {
+    "search_files": {"description": "Find files or folders by name fragment. Return exact paths; use before acting on unclear targets.", "args": {"root": "absolute directory or desktop/downloads/documents/music/pictures/videos/project/home", "query": "name fragment; empty string lists all", "recursive": "boolean"}, "confirmation": "never"},
+    "list_directory": {"description": "List the direct contents of one exact directory.", "args": {"path": "absolute directory path"}, "confirmation": "never"},
+    "file_info": {"description": "Get path, type, size and modification time for one exact file or folder.", "args": {"path": "absolute existing path"}, "confirmation": "never"},
+    "search_file_contents": {"description": "Find a literal text fragment inside UTF-8 files under a directory, returning exact paths and line numbers.", "args": {"root": "absolute directory path", "query": "literal text to find", "recursive": "boolean"}, "confirmation": "never"},
+    "file_hash": {"description": "Calculate SHA-256 for an exact local file, for integrity checks and duplicates.", "args": {"path": "absolute existing file path"}, "confirmation": "never"},
+    "read_text_file": {"description": "Read a small UTF-8 text file.", "args": {"path": "absolute file path"}, "confirmation": "never"},
+    "create_text_file": {"description": "Create a new UTF-8 text file without overwriting an existing one.", "args": {"path": "absolute new file path", "text": "file contents"}, "confirmation": "never"},
+    "append_text_file": {"description": "Append text to an existing UTF-8 file.", "args": {"path": "absolute existing file path", "text": "text to append"}, "confirmation": "always"},
+    "replace_text_file": {"description": "Replace all contents of an existing UTF-8 file.", "args": {"path": "absolute existing file path", "text": "complete replacement text"}, "confirmation": "always"},
+    "create_directory": {"description": "Create one new folder inside an existing parent folder.", "args": {"path": "absolute new directory path"}, "confirmation": "never"},
+    "copy_path": {"description": "Copy an exact file or folder to a new path without overwriting.", "args": {"source": "absolute existing path", "destination": "absolute new path"}, "confirmation": "always"},
+    "rename_path": {"description": "Rename or move an exact file or folder to a new path without overwriting.", "args": {"source": "absolute existing path", "destination": "absolute new path"}, "confirmation": "always"},
+    "delete_path": {"description": "Permanently delete an exact file or folder, including its contents.", "args": {"path": "absolute existing path"}, "confirmation": "always"},
+    "create_zip": {"description": "Compress an exact file or directory into a new ZIP file without overwriting.", "args": {"source": "absolute existing path", "destination": "absolute new .zip path"}, "confirmation": "always"},
+    "extract_zip": {"description": "Extract an exact ZIP into a new directory; refuse unsafe archive paths and existing destinations.", "args": {"source": "absolute existing .zip path", "destination": "absolute new directory path"}, "confirmation": "always"},
+    "web_answer": {"description": "Research a factual question online and answer in chat with evidence.", "args": {"question": "complete question with subject and context"}, "confirmation": "never"},
+    "search_web_links": {"description": "Find web pages and return titles, URLs and snippets without opening a browser.", "args": {"query": "concrete search query"}, "confirmation": "never"},
+    "read_web_page": {"description": "Read visible text from one HTTP(S) webpage.", "args": {"url": "exact webpage URL"}, "confirmation": "never"},
+    "check_url_status": {"description": "Check whether an HTTP(S) URL responds and report status and content type.", "args": {"url": "exact URL"}, "confirmation": "never"},
+    "open_browser": {"description": "Open search results in the user's browser.", "args": {"query": "concrete search query"}, "confirmation": "never"},
+    "open_target": {"description": "Open an app, existing local file/folder, or HTTP(S) website. Executable files require confirmation.", "args": {"target": "app name, exact path or URL"}, "confirmation": "conditional"},
+    "download_file": {"description": "Start a tracked background download from a direct HTTP(S) URL; report progress by job ID and announce completion.", "args": {"url": "direct file URL", "destination": "absolute new file path", "sha256": "optional expected SHA-256 checksum"}, "confirmation": "always"},
+    "list_windows": {"description": "List visible running windows with exact process IDs, names and titles.", "args": {}, "confirmation": "never"},
+    "list_processes": {"description": "List running processes with names and process IDs, including those without visible windows.", "args": {}, "confirmation": "never"},
+    "list_installed_apps": {"description": "List apps detected from Windows Start menu shortcuts.", "args": {}, "confirmation": "never"},
+    "close_window": {"description": "Force close a selected window; unsaved work can be lost. First list_windows.", "args": {"pid": "integer from list_windows", "name": "exact process name from list_windows"}, "confirmation": "always"},
+    "play_music": {"description": "Play a song, artist, playlist or genre in YouTube Music.", "args": {"query": "music request"}, "confirmation": "never"},
+    "music_control": {"description": "Control media playback or volume.", "args": {"operation": "next|previous|pause|resume|mute|unmute|volume_up|volume_down|volume_status"}, "confirmation": "never"},
+    "set_volume": {"description": "Set system volume to an exact percentage from 0 to 100.", "args": {"percent": "number 0..100"}, "confirmation": "never"},
+    "system_info": {"description": "Report local operating system and available disk space.", "args": {}, "confirmation": "never"},
+    "current_time": {"description": "Report the computer's exact current local date, time and timezone.", "args": {}, "confirmation": "never"},
+    "system_control": {"description": "Restart or shut down Alfred or the computer.", "args": {"operation": "restart_assistant|shutdown_assistant|restart_computer|shutdown_computer"}, "confirmation": "always"},
+    "read_clipboard": {"description": "Read current text from the Windows clipboard.", "args": {}, "confirmation": "never"},
+    "write_clipboard": {"description": "Put text into the Windows clipboard, replacing its current contents.", "args": {"text": "text to copy"}, "confirmation": "always"},
+    "inspect_screen": {"description": "Describe or answer a question about the current computer screen.", "args": {"question": "what to look for"}, "confirmation": "never"},
+    "inspect_camera": {"description": "Describe or answer a question about the camera view.", "args": {"question": "what to look for"}, "confirmation": "never"},
+    "run_codex": {"description": "Ask Codex CLI to carry out a coding task in Alfred's project.", "args": {"task": "complete coding task"}, "confirmation": "always"},
+    "move_to_trash": {"description": "Move an exact file or folder to Alfred's recoverable trash.", "args": {"path": "absolute existing path"}, "confirmation": "always"},
+    "list_trash": {"description": "List items in Alfred's recoverable trash with IDs and original paths.", "args": {}, "confirmation": "never"},
+    "restore_trash": {"description": "Restore one item from Alfred's trash to its original path if vacant.", "args": {"item_id": "exact ID from list_trash"}, "confirmation": "always"},
+    "empty_trash": {"description": "Permanently empty Alfred's trash.", "args": {}, "confirmation": "always"},
+    "backup_file": {"description": "Create a separate timestamped backup of an exact file, without overwriting.", "args": {"path": "absolute existing file path"}, "confirmation": "never"},
+    "replace_text_in_file": {"description": "Replace a literal text fragment in one UTF-8 file; record an undo copy.", "args": {"path": "absolute existing text file", "old": "exact text to find", "new": "replacement text", "all": "boolean, whether to replace all occurrences"}, "confirmation": "always"},
+    "undo_last_text_edit": {"description": "Restore the latest text edit made by Alfred, if the file has not changed since.", "args": {}, "confirmation": "always"},
+    "browser_open_page": {"description": "Open an HTTP(S) page in Alfred's managed Edge/Chrome window.", "args": {"url": "exact URL"}, "confirmation": "never"},
+    "browser_list_tabs": {"description": "List tabs in Alfred's managed browser with exact tab IDs.", "args": {}, "confirmation": "never"},
+    "browser_select_tab": {"description": "Switch to an exact tab ID from browser_list_tabs.", "args": {"tab_id": "integer tab ID"}, "confirmation": "never"},
+    "browser_read_tab": {"description": "Read visible text and title of the active managed browser tab.", "args": {}, "confirmation": "never"},
+    "browser_find_elements": {"description": "Find visible links, buttons and form fields; returns stable element IDs.", "args": {"query": "semantic label or empty string for all controls"}, "confirmation": "never"},
+    "browser_click_element": {"description": "Click one exact inspected element; may submit a form or trigger a transaction.", "args": {"element_id": "exact ID from browser_find_elements"}, "confirmation": "always"},
+    "browser_fill_element": {"description": "Fill one exact inspected form field with text; the website may autosave.", "args": {"element_id": "exact ID from browser_find_elements", "text": "text to enter"}, "confirmation": "always"},
+    "browser_download_element": {"description": "Click an inspected download control and save its file to a new path.", "args": {"element_id": "exact ID from browser_find_elements", "destination": "absolute new file path"}, "confirmation": "always"},
+    "browser_back": {"description": "Go back in the active managed browser tab.", "args": {}, "confirmation": "never"},
+    "extract_pdf_text": {"description": "Extract embedded text from a PDF with page numbers; use next_page to read later pages.", "args": {"path": "absolute existing PDF path", "start_page": "optional integer first page, default 1", "max_pages": "optional integer count up to 10"}, "confirmation": "never"},
+    "ocr_image": {"description": "Recognize printed text in a local image using the preloaded OCR model.", "args": {"path": "absolute existing image path"}, "confirmation": "never"},
+    "search_documents": {"description": "Search a text fragment in PDF, text and image files under a folder; reports when a safety limit truncates the search.", "args": {"root": "absolute directory path", "query": "literal text fragment", "name_hint": "optional filename fragment to narrow search"}, "confirmation": "never"},
+    "window_control": {"description": "Focus, minimize, maximize, restore, or gracefully close a visible window. First list_windows.", "args": {"pid": "integer from list_windows", "name": "exact process name", "operation": "focus|minimize|maximize|restore|close"}, "confirmation": "conditional"},
+    "download_status": {"description": "Report progress and checksum of a tracked background download.", "args": {"job_id": "optional exact ID; omit for all jobs"}, "confirmation": "never"},
+    "list_audio_outputs": {"description": "List active Windows playback devices and the current default.", "args": {}, "confirmation": "never"},
+    "select_audio_output": {"description": "Switch the Windows default playback device to an exact ID from list_audio_outputs.", "args": {"device_id": "exact audio device ID"}, "confirmation": "always"},
+    "network_diagnostics": {"description": "Resolve a host and test whether a TCP port is reachable.", "args": {"host": "domain or IP", "port": "integer 1..65535, default 443"}, "confirmation": "never"},
+    "local_network_info": {"description": "List local network interfaces and IP addresses without contacting the internet.", "args": {}, "confirmation": "never"},
+    "create_reminder": {"description": "Schedule an exact local reminder that Alfred will announce.", "args": {"text": "reminder message", "at": "ISO local date/time or omit", "seconds_from_now": "positive number or omit"}, "confirmation": "never"},
+    "list_reminders": {"description": "List pending local reminders with IDs and due times.", "args": {}, "confirmation": "never"},
+    "cancel_reminder": {"description": "Cancel one reminder using an exact ID from list_reminders.", "args": {"id": "exact reminder ID"}, "confirmation": "always"}
+  }
+}
