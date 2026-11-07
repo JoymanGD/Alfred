@@ -1,11 +1,14 @@
 import os
 import re
 import ctypes
+import time
 import numpy as np
 
 import sounddevice as sd
 from comtypes import CLSCTX_ALL, COMMETHOD, GUID, HRESULT, CoCreateInstance, IUnknown
 from ctypes import POINTER
+
+from alfred.tooling import AssistantOutput
 
 
 def clean_text_for_tts(text: str) -> str:
@@ -51,25 +54,28 @@ class AudioEngine:
         boosted_audio = self._apply_tts_gain(audio)
         return boosted_audio, sample_rate
 
-    def play_audio_interruptible(self, audio, sample_rate: int, interrupt_event, playing_event):
+    def play_audio_interruptible(
+        self, audio, sample_rate: int, interrupt_event, playing_event, on_started=None
+    ):
         if audio.ndim == 1:
             audio = audio.reshape(-1, 1)
 
         block_size = 2048
-        interrupt_event.clear()
-        playing_event.set()
-
         try:
             with sd.OutputStream(
                 samplerate=sample_rate,
                 channels=audio.shape[1],
                 dtype="float32",
             ) as stream:
+                playing_event.set()
+                if on_started is not None:
+                    on_started()
                 self._boost_current_process_session_volume()
                 index = 0
                 total = len(audio)
                 while index < total:
                     if interrupt_event.is_set():
+                        stream.abort()
                         break
                     end = min(index + block_size, total)
                     stream.write(audio[index:end])
@@ -273,8 +279,13 @@ def speaker_loop(
     followup_signal_queue,
     input_server=None,
 ):
+    reply_id = int(time.time() * 1000)
     while True:
-        reply_text = event_out.get()
+        output = event_out.get()
+        interim = isinstance(output, AssistantOutput) and output.interim
+        reply_text = output.text if isinstance(output, AssistantOutput) else output
+        reply_id += 1
+        interrupt_event.clear()
         if input_server is not None:
             input_server.notify_assistant_message(reply_text)
         if input_server is None or not input_server.has_chat_clients():
@@ -283,15 +294,36 @@ def speaker_loop(
         try:
             if input_server is not None:
                 input_server.notify_tts_started()
+            synthesis_started = time.perf_counter()
             audio, sample_rate = audio_engine.synthesize_audio(reply_text)
-            audio_engine.play_audio_interruptible(audio, sample_rate, interrupt_event, playing_event)
+            print(
+                f"[PERF] TTS synthesized {len(reply_text)} characters in "
+                f"{time.perf_counter() - synthesis_started:.3f}s "
+                f"(device={getattr(audio_engine.tts_backend, '_device', 'unknown')})."
+            )
+            if interrupt_event.is_set():
+                print("[TTS] Skipping reply interrupted during synthesis.")
+            else:
+                audio_engine.play_audio_interruptible(
+                    audio,
+                    sample_rate,
+                    interrupt_event,
+                    playing_event,
+                    on_started=(
+                        (lambda current_reply_id=reply_id: input_server.notify_tts_playback_started(current_reply_id))
+                        if input_server is not None and not interim
+                        else None
+                    ),
+                )
         except Exception as e:
             print(f"[TTS ERROR]: {e}")
         finally:
             if input_server is not None:
                 input_server.notify_tts_finished()
-                input_server.notify_assistant_replied()
-            followup_signal_queue.put("assistant_replied")
+                if not interim:
+                    input_server.notify_assistant_replied(reply_id)
+            if not interim:
+                followup_signal_queue.put("assistant_replied")
 
         while not event_img.empty():
             img = event_img.get()

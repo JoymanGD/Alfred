@@ -123,25 +123,7 @@ class MusicTool(Tool):
         self._endpoint_volume = None
 
     def matches(self, context: ToolContext, text: str) -> bool:
-        lowered = text.lower().strip()
-        patterns = [
-            r"^(?:play|put on|turn on|start)\b.*",
-            r"^(?:play me)\b.*",
-            r"^(?:включи|поставь)\b.*",
-        ]
-        if any(re.search(pattern, lowered) for pattern in patterns):
-            return True
-
-        mood_terms = [
-            "music", "song", "songs", "playlist", "relax", "relaxing", "calm", "happy", "sad", "fun",
-            "party", "jazz", "rock", "pop", "lofi", "lo-fi", "focus", "sleep", "workout",
-            "музыка", "песня", "песни", "плейлист", "весел", "груст", "спокой", "расслаб",
-            "джаз", "рок", "поп", "для сна", "для работы", "для тренировки",
-        ]
-        return any(term in lowered for term in mood_terms) and any(
-            lowered.startswith(prefix)
-            for prefix in ("play", "put on", "turn on", "start", "включи", "поставь")
-        )
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.language or context.detect_language(text)
@@ -242,16 +224,6 @@ class MusicTool(Tool):
                 seen.add(match)
                 return match
         return None
-
-    def is_broad_music_query(self, query: str) -> bool:
-        lowered = query.lower()
-        broad_terms = [
-            "music", "songs", "playlist", "relax", "relaxing", "calm", "happy", "sad", "party", "jazz",
-            "rock", "pop", "lofi", "focus", "sleep", "workout", "study", "chill", "музыка",
-            "песни", "плейлист", "весел", "груст", "спокой", "расслаб", "для сна",
-            "для работы", "для тренировки", "для учебы",
-        ]
-        return any(term in lowered for term in broad_terms)
 
     def build_watch_url(self, video_id: str, query: str = "") -> str:
         params = {"v": video_id, "autoplay": "1"}
@@ -494,7 +466,7 @@ $shell.SendKeys('{ENTER}')
 
     def open_music(self, context: ToolContext, query: str) -> str:
         self.stop_existing_music_playback()
-        if not query or query.lower() in {"music", "музыку", "музыка"}:
+        if not query:
             target = "https://music.youtube.com/"
             print(f"[YTM] Opening generic web target: {target}")
             self._open_music_target(target)
@@ -506,17 +478,6 @@ $shell.SendKeys('{ENTER}')
 
         video_id = self.get_first_youtube_video_id(context, fixed_query)
         print(f"[YTM] Resolved video id: {video_id}")
-
-        if self.is_broad_music_query(fixed_query):
-            if video_id:
-                target = self.build_watch_url(video_id, fixed_query)
-                print(f"[YTM] Opening broad-query track with autoplay in web YouTube Music: {target}")
-                self._open_music_target(target)
-                return target
-            target = f"https://music.youtube.com/search?q={quote_plus(fixed_query)}"
-            print(f"[YTM] Opening broad music search in web YouTube Music: {target}")
-            self._open_music_target(target)
-            return target
 
         if video_id:
             target = self.build_watch_url(video_id, fixed_query)

@@ -24,7 +24,8 @@ class ConversationMemory:
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
-        messages.append({"role": "user", "content": user_text})
+        if not history or history[-1] != {"role": "user", "content": self.normalize_text(user_text)}:
+            messages.append({"role": "user", "content": user_text})
         return messages
 
     def recent_history(self, limit: int = 4):

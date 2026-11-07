@@ -5,8 +5,7 @@ class ImageTool(Tool):
     name = "image"
 
     def matches(self, context: ToolContext, text: str) -> bool:
-        response = self._classify(text, context)
-        return "YES" in response.upper()
+        return context.routed_tool_name == self.name
 
     def handle(self, context: ToolContext, text: str) -> ToolResult:
         language = context.detect_language(text)
@@ -43,20 +42,6 @@ class ImageTool(Tool):
             reply_text="Изображение готово." if language == "ru" else "Image generated.",
             image_payload=image_payload,
         )
-
-    def _classify(self, text: str, context: ToolContext | None) -> str:
-        if context is None:
-            return "NO"
-        response = context.ollama_chat(
-            [
-                {
-                    "role": "system",
-                    "content": "You classify whether the user is asking for image generation. Reply with YES or NO only.",
-                },
-                {"role": "user", "content": text},
-            ]
-        )
-        return response["message"]["content"]
 
     def _prepare_prompt(self, context: ToolContext, text: str) -> str:
         response = context.ollama_chat(

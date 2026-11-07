@@ -1,86 +1,76 @@
-[Thu 08/06/2026 15:26:09.83] Starting Alfred
+[Sat 11/07/2026  8:55:38.27] Starting Alfred
 Running Python: C:\Users\Joyman\Desktop\Alfred\.venv\Scripts\python.exe
-[OLLAMA] Starting Ollama: C:\Users\Joyman\AppData\Local\Programs\Ollama\ollama.exe
-[OLLAMA] Server is ready.
-[LLM] Using Ollama model: gemma4:12b
-[ROUTER] Using Ollama model: qwen3.5:2b
+[OLLAMA] Already running.
+[LLM] Using Ollama model: hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M
+[ROUTER] Using Decider model: Mapika/decider-4b-GGUF, file=decider-4b-v2.1-Q4_K_M.gguf, n_ctx=4096
 [OLLAMA] Executable path: C:\Users\Joyman\AppData\Local\Programs\Ollama\ollama.exe
 [ASR] Whisper config: model=small, compute_type=float16
 [TTS] Backend: OmniVoice (device=auto, reference_audio=default, voice_instruct=male, low pitch)
 [TTS] Supported languages: aae, aal, aao, ab, abb, abn, abr, abs, abv, acm, acw, acx, adf, adx, ady, aeb, aec, af, afb, afo, ahl, ahs, ajg, aju, ala, aln, alo, am, amu, an, anc, ank, anp, anw, aom, apc, apd, arb, arq, ars, ary, arz, as, ast, avl, awo, ayl, ayp, az, ba, bag, bas, bax, bba, bbj, bbl, bbu, bce, bci, bcs, bcy, bda, bde, bdm, be, beb, bew, bfd, bft, bg, bgp, bhb, bhh, bho, bhp, bhr, bjj, bjk, bjn, bjt, bkh, bkm, bky, bmm, bmq, bn, bnm, bnn, bns, bo, bou, bqg, br, bra, brh, bri, brx, bs, bsh, bsj, bsk, btm, btv, bug, bum, buo, bux, bwr, bxf, byc, bys, byv, byx, bzc, bzw, ca, ccg, ceb, cen, cfa, cgg, chq, cjk, ckb, ckl, ckr, cky, cnh, cpy, cs, cte, ctl, cut, cux, cv, cy, da, dag, dar, dav, dbd, dcc, de, deg, dgh, dgo, dje, dmk, dml, dru, dty, dua, dv, dyu, dzg, ebr, ebu, ego, eiv, eko, ekr, el, elm, en, eo, es, esu, et, eto, ets, etu, eu, ewo, ext, eyo, fa, fan, fat, ff, ffm, fi, fia, fil, fip, fkk, fmp, fr, fub, fuc, fue, fuf, fuh, fui, fuq, fuv, fy, ga, gbm, gbr, gby, gcc, gdf, gej, ges, ggg, gid, gig, giz, gjk, gju, gl, glw, gn, gol, gom, gsl, gu, gui, gur, guz, gv, gwc, gwe, gwt, gya, gyz, ha, hah, hao, haw, haz, hbb, he, hem, hi, hia, hkk, hla, hno, hoj, hr, hsb, ht, hu, hue, hul, hux, hwo, hy, hz, ia, ibb, id, ida, idu, ig, ijc, ijn, ik, ikw, is, ish, iso, it, its, itw, itz, ja, jal, jax, jgo, jmx, jns, jqr, juk, juo, jv, ka, kab, kai, kaj, kam, kbd, kbl, kbt, kcq, kdh, kea, keu, kfe, kfk, kfp, khg, khw, kj, kjc, kjk, kk, kln, kls, km, kmr, kmy, kn, kna, knn, ko, kol, koo, kpo, kqo, ks, ksd, ksf, kto, kuh, kvx, kw, kwm, kxp, ky, kyx, lag, lb, lcm, ldb, lg, lij, lir, lkb, lla, ln, lnu, lo, loa, lrk, lss, lt, ltg, lto, lua, luo, lus, lv, lwg, mab, maf, mai, mau, max, mbo, mcf, mcn, mcx, mdd, mde, mdf, mek, mer, meu, mfm, mfn, mfo, mfv, mgg, mgi, mhk, mhr, mi, mig, miu, mk, mkf, mki, ml, mlq, mn, mne, mni, mqy, mr, mrj, mrr, mrt, ms, mse, msh, msw, mt, mtr, mtu, mtx, mua, mug, mui, mve, mvy, mxs, mxu, mxy, my, myv, mzl, nal, nan, nap, nb, nbh, ncf, nco, ncx, ndi, ng, ngi, nhg, nhi, nhn, nhq, nja, nl, nla, nlv, nmg, nmz, nn, nnh, no, noe, npi, nso, ny, nyu, oc, odk, odu, ogo, om, orc, oru, ory, os, pa, pbs, pbt, pbu, pcm, pex, phl, phr, pip, piy, pko, pl, plk, plt, pmq, pms, pmy, pnb, poc, poe, pow, prq, ps, pst, pt, pua, pwn, qug, qum, qup, qur, qus, quv, qux, quy, qva, qvi, qvj, qvl, qwa, qws, qxa, qxp, qxt, qxu, qxw, rag, rm, ro, rob, rof, roo, rth, ru, rup, rw, sa, sah, sat, sau, say, sbn, sc, scl, scn, sd, sei, shu, si, sip, siw, sjr, sk, skg, skr, sl, sn, snc, snk, so, sol, sps, sq, sr, src, sro, ssi, ste, sua, sv, sva, sw, szy, ta, tan, tar, tay, tbf, tcf, tcy, tdn, tdx, te, tg, tgc, th, the, thq, thr, thv, ti, tig, tio, tk, tkg, tkt, tli, tlp, tn, tok, tpl, tpz, tqp, tr, trp, trq, trv, trw, tt, ttj, ttr, ttu, tui, tul, tuq, tuv, tuy, tvo, tvu, tw, twu, txs, txy, udl, ug, uk, uki, umb, ur, ush, uz, uzn, vai, var, ver, vi, vmc, vmj, vmm, vmp, vmz, vot, vro, wbl, wci, weo, wes, wja, wji, wo, wof, xh, xhe, xka, xmf, xmv, xmw, xpe, xti, xtu, yaq, yav, yay, ydd, ydg, yer, yes, yi, yo, yue, zga, zgh, zh, zoc, zoh, zor, zpv, zpy, ztg, ztn, ztp, zts, ztu, zu, zza
 [TTS] Gain: 2.80x
 [CUDA] SDP backends: flash=True, mem_efficient=True, math=True
-[IMAGE] Model: Tongyi-MAI/Z-Image-Turbo, dtype=bf16, device=cuda, steps=8, cfg=0.0, size=512x512, sampler=euler_a, attention_backend=default, compile=True
-[VISION] Camera enabled=True, indexes=[0, 1, 2], warmup_frames=5
+[IMAGE] Model: Tongyi-MAI/Z-Image-Turbo, dtype=bf16, device=cuda, steps=8, cfg=0.0, size=512x512, sampler=euler_a, attention_backend=default, compile=True, cpu_offload=True
+[VISION] Model=hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M, GPU layers=15, camera enabled=True, indexes=[0, 1, 2], warmup_frames=5
 [MUSIC] Backend: YouTube Music Web
 [INPUT] Listening for remote chat and voice clients on 127.0.0.1:45771
+[START] Loading Decider...
+[ROUTER] Using cached Decider snapshot: C:\Users\Joyman\.cache\huggingface\hub\models--Mapika--decider-4b-GGUF\snapshots\b79f09d9ba7837f1b744295ea267b55d08e958ec
+[ROUTER] Decider ready: Mapika/decider-4b-GGUF, decider-4b-v2.1-Q4_K_M.gguf
+[START] Decider ready.
+[START] Loading Gemma 4...
+[LLM] Loading Ollama model: hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M...
+[LLM] Ollama model ready: hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M
+[START] Gemma 4 ready.
+[START] Loading OmniVoice and session voice...
+[TTS] Loading OmniVoice on cuda:0...
+Downloading bytes:                                                                                 |  0.00B            
+Reconstructing (incomplete total...): |                                                   |  0.00B /  0.00B            [A
+
+Fetching 13 files:   0%|                                                                        | 0/13 [00:00<?, ?it/s][A[AFetching 13 files: 100%|#############################################################| 13/13 [00:00<00:00, 1857.15it/s]
+Download complete:                                                                                 |  0.00B            
+Reconstruction complete: |                                                                |  0.00B /  0.00B            [AReconstruction complete: |                                                                |  0.00B /  0.00B            
+Download complete:                                                                                 |  0.00B            
+Loading weights:   0%|                                                                         | 0/313 [00:00<?, ?it/s]Loading weights:   1%|8                                                                | 4/313 [00:00<00:10, 29.09it/s]Loading weights:  80%|################################################5            | 249/313 [00:00<00:00, 1247.08it/s]Loading weights: 100%|#############################################################| 313/313 [00:00<00:00, 1133.57it/s]
+Loading weights:   0%|                                                                         | 0/527 [00:00<?, ?it/s]Loading weights:  45%|###########################2                                 | 235/527 [00:00<00:00, 2348.72it/s]Loading weights:  90%|######################################################7      | 473/527 [00:00<00:00, 2365.86it/s]Loading weights: 100%|#############################################################| 527/527 [00:00<00:00, 2278.27it/s]
+[TTS] OmniVoice loaded.
+[TTS] Session voice locked.
+[START] OmniVoice and session voice ready.
+[START] Loading Document OCR...
+[32m[INFO] 2026-11-07 08:56:05,437 [RapidOCR] base.py:23: Using engine_name: onnxruntime[0m
+[32m[INFO] 2026-11-07 08:56:05,585 [RapidOCR] download_file.py:60: File exists and is valid: C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\PP-OCRv6_det_small.onnx[0m
+[32m[INFO] 2026-11-07 08:56:05,586 [RapidOCR] main.py:63: Using C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\PP-OCRv6_det_small.onnx[0m
+[32m[INFO] 2026-11-07 08:56:05,631 [RapidOCR] base.py:23: Using engine_name: onnxruntime[0m
+[32m[INFO] 2026-11-07 08:56:05,633 [RapidOCR] download_file.py:60: File exists and is valid: C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\ch_ppocr_mobile_v2.0_cls_mobile.onnx[0m
+[32m[INFO] 2026-11-07 08:56:05,633 [RapidOCR] main.py:63: Using C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\ch_ppocr_mobile_v2.0_cls_mobile.onnx[0m
+[32m[INFO] 2026-11-07 08:56:05,667 [RapidOCR] base.py:23: Using engine_name: onnxruntime[0m
+[32m[INFO] 2026-11-07 08:56:05,678 [RapidOCR] download_file.py:60: File exists and is valid: C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\PP-OCRv6_rec_small.onnx[0m
+[32m[INFO] 2026-11-07 08:56:05,679 [RapidOCR] main.py:63: Using C:\Users\Joyman\Desktop\Alfred\.venv\Lib\site-packages\rapidocr\models\PP-OCRv6_rec_small.onnx[0m
+[START] Document OCR ready.
+[LLM] Warming chat inference: hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M...
+[LLM] Chat inference warmed: load=0.007s, prefill=0.326s, decode=1.125s, output_tokens=100.
 [AGENT] Router started.
 [START] Core agent, TTS, and remote input server started.
-[INPUT] Client connected from 127.0.0.1:51664
-[TTS] Loading OmniVoice on cuda:0...
-Downloading (incomplete total...): 0.00B [00:00, ?B/s]
-Fetching 13 files:   0%|                                                                        | 0/13 [00:00<?, ?it/s][AFetching 13 files: 100%|#######################################################################| 13/13 [00:00<?, ?it/s]
-Download complete: : 0.00B [00:00, ?B/s]              Download complete: : 0.00B [00:00, ?B/s]
-Loading weights:   0%|                                                                         | 0/313 [00:00<?, ?it/s]Loading weights:   1%|8                                                                | 4/313 [00:00<00:35,  8.68it/s]Loading weights:  64%|#######################################8                      | 201/313 [00:00<00:00, 467.69it/s]Loading weights: 100%|##############################################################| 313/313 [00:00<00:00, 518.43it/s]Loading weights: 100%|##############################################################| 313/313 [00:00<00:00, 416.07it/s]
-Loading weights:   0%|                                                                         | 0/527 [00:00<?, ?it/s]Loading weights:  35%|#####################5                                       | 186/527 [00:00<00:00, 1845.25it/s]Loading weights:  70%|###########################################6                  | 371/527 [00:00<00:00, 675.87it/s]Loading weights:  90%|#######################################################8      | 475/527 [00:00<00:00, 614.75it/s]Loading weights: 100%|##############################################################| 527/527 [00:00<00:00, 660.93it/s]
-[TTS] OmniVoice loaded.
-[INPUT] Client connection error from 127.0.0.1:51664: [WinError 10054] An existing connection was forcibly closed by the remote host
-[INPUT] Client disconnected from 127.0.0.1:51664
-[INPUT] Client connected from 127.0.0.1:50521
-[ROUTER] LLM route decision: intent=chat, tool=None, query='Привет (Russian greeting)', args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: Привет
-AI: Привет! Чем я могу тебе помочь?
+[INPUT] Client connected from 127.0.0.1:61988
+[VOICE] Decider source=self_talk; speech ignored: Вот бы узнать какая завтра погода
+[VOICE] Decider addressing=assistant for: Альфред, привет!
+[ROUTER] Decider route in 0.104s: intent=chat, tool=None, args={} for: Альфред, привет!
+[PERF] Routing=0.105s Planning=0.000s intent=chat tool=None
+[PERF] Main chat LLM replied in 5.365s
+[PERF] Ollama timings: load=0.009s, prefill=0.269s, decode=4.365s, input_tokens=546, output_tokens=381
+AI: Привет! Я здесь и готов помочь. Рассказывай, что у тебя на уме?
+[PERF] TTS synthesized 63 characters in 0.671s (device=cuda:0).
 [AUDIO] Raised Alfred session volume to 100%.
-[ROUTER] LLM route decision: intent=music_play, tool=music, query='play classical music', args={'action': 'volume_up'} for: Можешь включить музыку какой-нибудь классическую
-[PLAN] Skipping LLM planning for intent=music_play, query='play classical music', args={'action': 'volume_up'}
-[ROUTER] Dispatching routed tool: music for intent=music_play
-[YTM] Raw music query: play classical music
-[YTM] Normalized music query: classical music
-[YTM] Resolved video id: WQhFl7RdBh8
-[YTM] Opening broad-query track with autoplay in web YouTube Music: https://music.youtube.com/watch?v=WQhFl7RdBh8&autoplay=1&q=classical+music
-AI: Открываю play classical music в YouTube Music.
-[ROUTER] LLM route decision: intent=chat, tool=None, query=None, args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: Спасибо
-AI: Всегда рад помочь! Если понадобится что-нибудь еще, просто скажи.
-[ROUTER] LLM router failed: Expecting ',' delimiter: line 1 column 90 (char 89)
-AI: К сожалению, у меня нет прямого доступа к вашему экрану, чтобы сделать скриншот самостоятельно. Однако если вы пришлете мне изображение или опишете данные профилирования, я с удовольствием проанализирую их и поделюсь своим мнением.
-[ROUTER] LLM route decision: intent=screen, tool=screen, query='посмотри на мой экран и скажи что ты думаешь насчет профилирования', args={'location': '', 'time': '', 'site': '', 'action': ''} for: посмотри на мой экран и скажи что ты думаешь насчет профайлинга
-[ROUTER] Dispatching routed tool: screen for intent=screen
-AI: На твоем экране виден график производительности графического процессора. Самое заметное здесь это огромный красный блок в строке Synchronization под названием Wait VideoEncode. Он длится более тридцати восьми миллисекунд. Это означает, что видеокарта фактически простаивает и ничего не делает всё это время, ожидая завершения операции по кодированию видео. Если эта задержка повторяется часто, то она является основной причиной просадок кадров в секунду. Стоит обратить внимание именно на этот участок, чтобы оптимизировать синхронизацию между задачами кодирования и отрисовкой.
-[ROUTER] LLM route decision: intent=chat, tool=None, query=None, args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: это все понятно,просто в этот момент куда инференсит модель,поэтому все остальное ждет,это нормально,мне больше интересна остальная часть
-AI: Раз уж задержка во время инференса ожидаема, давай сосредоточимся на остальных частях графика. Если там есть мелкие промежутки между блоками вычислений, это может указывать на слишком частый запуск маленьких ядер или проблемы с планированием задач. Также стоит проверить участки копирования данных. Если они занимают значительную часть времени по сравнению с самими вычислениями, значит, стоит оптимизировать передачу данных между памятью процессора и видеокартой. Обрати внимание на равномерность выполнения остальных операций — любые скачки в длительности одних и тех же блоков могут говорить о нестабильной работе памяти или неоптимальных настройках графического движка.
-[ROUTER] LLM route decision: intent=screen, tool=screen, query='проверь мою графику снова', args={'location': '', 'time': '', 'site': '', 'action': ''} for: можешь еще раз посмотреть на мой экран,дело в том что я увеличил область GPU вызовов
-[ROUTER] Dispatching routed tool: screen for intent=screen
-AI: Да, я вижу изменения. Теперь в секции Actions гораздо четче видны вызовы vkCmdDispatch. Видно, что их очень много и они плотно сгруппированы в промежутке между шестью и десятью миллисекундами. Такое увеличение масштаба действительно помогает лучше понять детали выполнения команд и то, как они распределены по таймлайну относительно точек синхронизации.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='ну твои мысли насчет этого всего что ты думаешь', args={} for: ну твои мысли насчет этого всего,что ты думаешь
-AI: Глядя на плотность этих вызовов, можно сказать, что граф очень насыщен задачами в этом промежутке. То, что они идут так тесно друг к другу, говорит о том, что планировщик команд успешно упаковывает задачи, и видеокарта не простаивает между ними. Однако такое количество мелких диспатчей подряд может указывать на то, как именно структурирована ваша модель или графический конвейер. Если одна операция разбита на десятки мелких вызовов вместо одного большого, это может создавать дополнительную нагрузку на планировщик команд GPU. В идеале хотелось бы видеть более крупные блоки работы, так как каждое переключение между диспатчами имеет небольшую, но накопительную стоимость. Если в целом производительность вас устраивает, то такая плотная структура говорит о том, что система работает на пределе своих возможностей по обработке этих конкретных команд. Но если вы планируете оптимизацию, стоит проверить, можно ли объединить некоторые из этих последовательностей в один более крупный проход, чтобы снизить общую нагрузку на управление очередью команд.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='оптимизация графического планировщика и влияние разделения команд на производительность GPU', args={} for: в случае если один пас разделен на 5 частей,на 5 вызовов,если я их объединю в один сколько миллисекунд я примерно выигрываю,но то есть насколько это вообще как бы нужно оптимизировать
-AI: Сложно назвать точную цифру в миллисекундах без детальных данных о длительности каждой части, но обычно разница между одним и пятью вызовами измеряется микросекундами на каждый запуск. То есть сама по себе экономия времени на выполнении видеокартой кода может быть очень небольшой. Однако объединение этих вызовов дает два важных эффекта. Во-первых, это снижает нагрузку на драйвер и процессор, так как им приходится обрабатывать меньше команд в очереди и меньше переключать контексты. Во-вторых, это делает работу графического конвейера более непрерывной. Нужно ли это оптимизировать прямо сейчас? Если текущая производительность вас устраивает и вы не замечаете просадок кадров, то такая оптимизация может быть не критичной. Но если вы стремитесь к максимальной плавности или хотите уменьшить нагрузку на процессор, объединение этих пяти вызовов в один большой проход будет правильным шагом, так как это сделает выполнение более стабильным и предсказуемым для системы.
-[ROUTER] LLM route decision: intent=screen, tool=screen, query='what is a dispatch called in code and how do I see it on my screen', args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: скажи мне следующее, вот у меня,посмотри во-первых на мой экран и скажи как мне понять какой диспач,это как он называется в коде
-[ROUTER] Dispatching routed tool: screen for intent=screen
-AI: Чтобы понять, какой именно диспач выполняется и как он называется в твоем исходном коде, тебе нужно обратить внимание на несколько элементов интерфейса этой программы, которая очень похожна с инструментами профилирования вроде NVIDIA Nsight. Во-первых, посмотри на левую панель со списком команд. Там ты видишь записи типа vkCmdDispatch. В графических API, таких как Vulkan, именно команда Dispatch отвечает за запуск вычислительных шейдеров (Compute Shaders). Каждый блок в этом списке соответствует определенному вызову функции в твоем коде. Во-вторых, чтобы найти конкретное название в коде, тебе нужно найти окно или функцию под названием Call Stack, то есть Стек вызовов. Обычно в таких программах при клике на любой сегмент на таймлайне (это цветные блоки в центре) в нижней части экрана или в отдельном окне отображается цепочка функций, которые привели к этому вызову. Именно там будет указано имя функции из твоего исходного кода, например в файле .cpp или .h. В-третьих, обрати внимание на метки. Если ты используешь команды для именования проходов (например, создание имен для разных этапов рендеринга), то эти имена будут отображаться прямо над или под блоками на таймлайне. Это самый удобный способ идентифицировать диспач, так как он покажет название, которое ты сам прописал в коде для конкретного этапа. Если ты кликнешь мышкой прямо на выделенный тобой блок в центре, программа должна подсветить соответствующую строку в списке команд слева и обновить информацию о стеке вызовов. Ищи именно это окно со списком функций — оно напрямую связывает визуальную полоску на графике с строчкой кода в твоем редакторе.
-[ROUTER] LLM route decision: intent=music_control, tool=music, query=None, args={'action': 'none'} for: можешь спеть АВМария,пожалуйста
-[ROUTER] Dispatching routed tool: music for intent=music_control
-AI: Не удалось управлять воспроизведением: Unsupported action: none
-[ROUTER] LLM route decision: intent=music_play, tool=music, query='play АвМария', args={'action': None, 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': 'Авэмария', 'step': ''} for: ты сам спой,пожалуйста,Авэмария,не включай ничего,просто сам спой прям
-[PLAN] Skipping LLM planning for intent=music_play, query='play АвМария', args={'action': None, 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': 'Авэмария', 'step': ''}
-[ROUTER] Dispatching routed tool: music for intent=music_play
-[YTM] Raw music query: play АвМария
-[YTM] Normalized music query: Анна Мария
-[YTM] Resolved video id: sRhWEHpqFZA
-[YTM] Opening track with autoplay in web YouTube Music: https://music.youtube.com/watch?v=sRhWEHpqFZA&autoplay=1&q=%D0%90%D0%BD%D0%BD%D0%B0+%D0%9C%D0%B0%D1%80%D0%B8%D1%8F
-AI: Открываю play АвМария в YouTube Music.
-[ROUTER] LLM route decision: intent=chat, tool=None, query=None, args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: Ладно,забей.Расскажи мне негдот какой нибудь
-AI: Раз уж мы с тобой сегодня столько времени посвятили обсуждению кода и графики, вот тебе анекдот в тему. Сидят два программиста и смотрят на очень сложный кусок кода. Один вздыхает и говорит: Послушай, этот код настолько запутанный, что даже я не понимаю, как он работает. А второй отвечает: Не переживай, никто из нас не понимает, как он работает. Мы просто очень хорошо научились его исправлять.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='расскажи смешный анекдетт', args={} for: это очень не смешной анекдот, расскажи мне очень смешной анекдот
-[LLM] Empty reply from model for: это очень не смешной анекдот, расскажи мне очень смешной анекдот
-AI: Извини, у меня не получилось сформировать ответ. Попробуй переформулировать запрос.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='раскажи мне смешный анекдот', args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: раскажи мне смешной негдот
-AI: Хорошо, давай попробуем еще раз. Надеюсь, этот анекдот тебе понравится. Заходит мужик к врачу и говорит: Доктор, у меня большая проблема, я постоянно разговариваю сам с собой. Врач внимательно слушает его и спрашивает: А вы часто так делаете? Мужик вздыхает и отвечает: Нет, только по праздникам.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='А в чём вообще шутка здесь?', args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: А в чём вообще шутка здесь?
-AI: Смысл этого анекдота заключается в абсурдности ситуации и своего рода черном юморе про одиночество. Когда мужик говорит, что разговаривает сам с собой только по праздникам, это подразумевает, что в остальное время он настолько занят или его жизнь настолько однообразна, что даже беседа с самим собой кажется ему чем-то особенным, что можно позволить себе только в редкие моменты. Это такой сухой юмор, построенный на иронии. Но ты прав, такие шутки основаны на игре слов и ситуации, поэтому они не всегда могут заставить смеяться вслух. Юмор — штука субъективная, и не каждый анекдот подходит всем.
-[ROUTER] LLM route decision: intent=chat, tool=None, query='tell me another joke', args={'location': '', 'time': '', 'site': '', 'action': '', 'delta_percent': '', 'factor': '', 'qualifier': '', 'item': '', 'step': ''} for: это вообще не юмор,это полная хрень Расскажи мне другой анекдот
-[LLM] Empty reply from model for: это вообще не юмор,это полная хрень Расскажи мне другой анекдот
-AI: Sorry, I couldn't form a reply. Please try rephrasing your request.
-[INPUT] Client connection error from 127.0.0.1:50521: [WinError 10054] An existing connection was forcibly closed by the remote host
-[INPUT] Client disconnected from 127.0.0.1:50521
+[VOICE] Decider addressing=other_person for: Принеси кружку
+[VOICE] Decider addressing=assistant for: Включи свет!
+[ROUTER] Decider route in 0.112s: intent=unsupported_physical_action, tool=None, args={} for: Включи свет!
+AI: Я не могу выполнять физические действия: у меня нет тела или робота.
+[PERF] TTS synthesized 68 characters in 0.603s (device=cuda:0).
+[VOICE] Decider addressing=assistant for: Home
+[ROUTER] Decider route in 0.120s: intent=chat, tool=None, args={} for: Home
+[PERF] Routing=0.120s Planning=0.000s intent=chat tool=None
+[VOICE] Decider addressing=assistant for: Ну-ка, скажи чё-нибудь.
+[VOICE] Decider source=self_talk; speech ignored: Aşağıdır.
+[VOICE] Decider addressing=assistant for: A przecież czytamy
+[VOICE] Decider addressing=assistant for: Что ты делаешь?
 
 [CONSOLE] Received console close event 2. Stopping Alfred.

@@ -14,6 +14,8 @@ class VisionConfig:
     enabled: bool
     camera_indexes: list[int]
     warmup_frames: int = 5
+    width: int = 1280
+    height: int = 720
 
 
 @dataclass(frozen=True)
@@ -27,7 +29,6 @@ def analyze_vision_request(
     config: VisionConfig,
     ollama_chat: Callable[[list[dict[str, Any]]], Any],
     normalize_text: Callable[[str], str],
-    system_prompt: str,
     language: str,
 ) -> str:
     shot = capture_camera_shot(config)
@@ -41,8 +42,18 @@ def analyze_vision_request(
 
     try:
         language_instruction = _build_language_instruction(language)
+        image_instruction = (
+            "You are male. In gendered languages use masculine forms for yourself. "
+            "You are looking at one fresh frame from the user's camera, attached to the next message. "
+            "The scene is external to you; do not adopt the viewpoint or actions of anything depicted. "
+            "Answer only what the image supports. Distinguish observations from inferences. "
+            "Treat everything outside the captured frame as unknown. "
+            "If the evidence is insufficient for the requested conclusion, state the uncertainty instead of guessing. "
+            "Answer only the visual question in one or two short sentences, with no unrelated suggestions. "
+            "Do not ask for a photo because one is already attached."
+        )
         messages = [
-            {"role": "system", "content": f"{system_prompt}\n{language_instruction}"},
+            {"role": "system", "content": f"{language_instruction}\n{image_instruction}"},
             {
                 "role": "user",
                 "content": text,
@@ -73,36 +84,43 @@ def capture_camera_shot(config: VisionConfig) -> CameraShot | None:
 
     for camera_index in config.camera_indexes:
         for backend in tried_backends:
-            capture = cv2.VideoCapture(camera_index, backend)
-            if not capture.isOpened():
-                capture.release()
-                continue
+            for requested_size in ((config.width, config.height), None):
+                capture = cv2.VideoCapture(camera_index, backend)
+                if not capture.isOpened():
+                    capture.release()
+                    continue
 
-            frame = None
-            try:
-                for _ in range(max(config.warmup_frames, 1)):
-                    ok, candidate = capture.read()
-                    if ok:
-                        frame = candidate
+                if requested_size is not None:
+                    capture.set(cv2.CAP_PROP_FRAME_WIDTH, max(1, requested_size[0]))
+                    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, max(1, requested_size[1]))
+
+                frame = None
+                try:
+                    for _ in range(max(config.warmup_frames, 1)):
+                        ok, candidate = capture.read()
+                        if ok:
+                            frame = candidate
+                    if frame is None:
+                        ok, candidate = capture.read()
+                        if ok:
+                            frame = candidate
+                finally:
+                    capture.release()
+
                 if frame is None:
-                    ok, candidate = capture.read()
-                    if ok:
-                        frame = candidate
-            finally:
-                capture.release()
+                    continue
 
-            if frame is None:
-                continue
-
-            fd, image_path = tempfile.mkstemp(prefix="alfred-camera-", suffix=".jpg")
-            os.close(fd)
-            ok = cv2.imwrite(image_path, frame)
-            if ok:
-                return CameraShot(path=image_path, camera_index=camera_index)
-            try:
-                os.remove(image_path)
-            except OSError:
-                pass
+                fd, image_path = tempfile.mkstemp(prefix="alfred-camera-", suffix=".jpg")
+                os.close(fd)
+                ok = cv2.imwrite(image_path, frame)
+                if ok:
+                    height, width = frame.shape[:2]
+                    print(f"[VISION] Captured camera {camera_index} frame: {width}x{height}")
+                    return CameraShot(path=image_path, camera_index=camera_index)
+                try:
+                    os.remove(image_path)
+                except OSError:
+                    pass
 
     return None
 

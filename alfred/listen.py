@@ -1,5 +1,3 @@
-import difflib
-import re
 import time
 from collections import deque
 
@@ -16,79 +14,6 @@ def transcribe_audio(local_asr_model, audio: np.ndarray, hotwords: list[str] | N
     return "".join(seg.text for seg in segments).strip()
 
 
-def extract_wake_command(text: str, wake_words: list[str], normalize_text):
-    cleaned = normalize_text(text)
-    lowered = cleaned.lower()
-
-    for wake_word in wake_words:
-        if lowered == wake_word:
-            return ""
-        match = re.search(rf"\b{re.escape(wake_word)}\b", lowered)
-        if not match:
-            continue
-
-        before = cleaned[:match.start()].strip(" ,.!?:;")
-        after = cleaned[match.end():].strip(" ,.!?:;")
-
-        if after:
-            return after
-        if before:
-            return before
-        return ""
-
-    fuzzy_match = _find_fuzzy_wake_match(cleaned, lowered, wake_words)
-    if fuzzy_match is not None:
-        start, end = fuzzy_match
-        before = cleaned[:start].strip(" ,.!?:;")
-        after = cleaned[end:].strip(" ,.!?:;")
-
-        if after:
-            print(f"[WAKE] Fuzzy wake word match: {cleaned[start:end]}")
-            return after
-        if before:
-            print(f"[WAKE] Fuzzy wake word match: {cleaned[start:end]}")
-            return before
-        print(f"[WAKE] Ignored fuzzy wake-only match: {cleaned[start:end]}")
-        return None
-
-    return None
-
-
-def _find_fuzzy_wake_match(cleaned: str, lowered: str, wake_words: list[str]) -> tuple[int, int] | None:
-    token_matches = list(re.finditer(r"[a-zA-Z\u0400-\u04FF]+", lowered))
-    candidates: list[tuple[str, int, int]] = []
-
-    for index, match in enumerate(token_matches):
-        candidates.append((match.group(0), match.start(), match.end()))
-        if index + 1 < len(token_matches):
-            next_match = token_matches[index + 1]
-            combined = match.group(0) + next_match.group(0)
-            candidates.append((combined, match.start(), next_match.end()))
-
-    best_match: tuple[int, int] | None = None
-    best_score = 0.0
-    for candidate, start, end in candidates:
-        for wake_word in wake_words:
-            score = _wake_similarity(candidate, wake_word)
-            if score > best_score:
-                best_score = score
-                best_match = (start, end)
-
-    if best_score >= 0.72:
-        return best_match
-    return None
-
-
-def _wake_similarity(candidate: str, wake_word: str) -> float:
-    if not candidate or not wake_word:
-        return 0.0
-    if candidate[0] != wake_word[0]:
-        return 0.0
-    if abs(len(candidate) - len(wake_word)) > 3:
-        return 0.0
-    return difflib.SequenceMatcher(a=candidate, b=wake_word).ratio()
-
-
 def mic_listener(
     input_sink,
     get_vad_model,
@@ -96,15 +21,16 @@ def mic_listener(
     min_speech_seconds: float,
     end_silence_seconds: float,
     pre_speech_seconds: float,
-    wake_followup_seconds: float,
+    conversation_context_seconds: float,
     tts_playing_event,
     followup_signal_queue,
     restart_signal_queue,
-    wake_words: list[str],
     hotwords: list[str] | None,
     normalize_text,
 ):
     while True:
+        if hasattr(input_sink, "wait_until_ready"):
+            input_sink.wait_until_ready()
         try:
             local_vad_model = get_vad_model()
             local_asr_model = get_asr_model()
@@ -117,7 +43,7 @@ def mic_listener(
 
             print(
                 f"[ASR] Microphone listener started. pre_speech={pre_speech_seconds:.2f}s, "
-                f"wake_followup={wake_followup_seconds:.2f}s"
+                f"conversation_context={conversation_context_seconds:.2f}s"
             )
 
             with sd.InputStream(
@@ -130,15 +56,20 @@ def mic_listener(
                 silence_block_count = 0
                 utterance_active = False
                 pre_speech_buffer = deque(maxlen=pre_speech_blocks)
-                wake_followup_until = 0.0
-                self_echo_guard_until = 0.0
+                conversation_until = 0.0
+                assistant_audio_tail_until = 0.0
+                speech_started_during_tts = False
+                speech_started_after_tts = False
 
                 while True:
+                    if hasattr(input_sink, "is_ready") and not input_sink.is_ready:
+                        print("[ASR] Core is loading; pausing microphone input.")
+                        break
                     while not followup_signal_queue.empty():
                         followup_signal_queue.get_nowait()
-                        wake_followup_until = time.monotonic() + wake_followup_seconds
-                        self_echo_guard_until = time.monotonic() + 1.2
-                        print("[WAKE] Refreshed follow-up window after assistant reply.")
+                        conversation_until = time.monotonic() + conversation_context_seconds
+                        assistant_audio_tail_until = time.monotonic() + 1.2
+                        print("[VOICE] Conversation continuation window refreshed.")
 
                     if not restart_signal_queue.empty():
                         restart_signal_queue.get_nowait()
@@ -152,13 +83,11 @@ def mic_listener(
                     speaking_now = speech_prob > 0.35
                     pre_speech_buffer.append(pcm.copy())
 
-                    if speaking_now and tts_playing_event.is_set():
-                        print("[TTS] Interrupted by user speech.")
-                        input_sink.interrupt_tts()
-
                     if speaking_now:
                         if not utterance_active:
                             speech_chunks = list(pre_speech_buffer)
+                            speech_started_during_tts = tts_playing_event.is_set()
+                            speech_started_after_tts = time.monotonic() < assistant_audio_tail_until
                         speech_chunks.append(pcm)
                         silence_block_count = 0
                         utterance_active = True
@@ -183,25 +112,12 @@ def mic_listener(
                         text = transcribe_audio(local_asr_model, audio, hotwords=hotwords)
                         if text:
                             print(f"[ASR HEARD]: {text}")
-                            wake_command = extract_wake_command(text, wake_words, normalize_text)
-                            now = time.monotonic()
-                            if now < self_echo_guard_until:
-                                if wake_command == "" or wake_command is None:
-                                    print("[WAKE] Ignored likely self-echo right after assistant reply.")
-                                    continue
-                            if wake_command is None:
-                                if now < wake_followup_until:
-                                    print("[WAKE] Accepted follow-up command without wake word.")
-                                    wake_followup_until = now + wake_followup_seconds
-                                    input_sink.submit_text(normalize_text(text))
-                                    continue
-                                print("[WAKE] Ignored speech without wake word.")
-                                continue
-                            wake_followup_until = time.monotonic() + wake_followup_seconds
-                            if wake_command:
-                                input_sink.submit_text(wake_command)
-                            else:
-                                input_sink.trigger_wake()
+                            input_sink.submit_voice_candidate(
+                                normalize_text(text),
+                                followup_active=time.monotonic() < conversation_until,
+                                during_tts=speech_started_during_tts,
+                                recent_tts=speech_started_after_tts,
+                            )
         except Exception as e:
             print(f"[ASR ERROR]: microphone listener crashed, restarting: {e}")
             time.sleep(0.5)

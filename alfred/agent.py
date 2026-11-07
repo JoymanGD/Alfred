@@ -1,7 +1,9 @@
 import os
+import time
 from dataclasses import dataclass, replace
 
 from alfred.execution_planner import refine_route_with_planning
+from alfred.computer_actions import ComputerActionRunner
 from alfred.router import analyze_request
 from alfred.runtime import build_reply_language_instruction
 from alfred.tooling import ToolContext, ToolRegistry
@@ -11,9 +13,10 @@ from alfred.tools.local_files import LocalFilesTool, LocalFilesToolConfig
 from alfred.tools.music import MusicTool, MusicToolConfig
 from alfred.tools.plan import PlanTool, PlanToolConfig
 from alfred.tools.screen import ScreenTool
-from alfred.tools.system import SystemTool, SystemToolConfig
+from alfred.tools.system import SystemTool
 from alfred.tools.vision import VisionTool
-from alfred.tools.web import WebTool, WebToolConfig
+from alfred.tools.web import WebTool
+from alfred.vane_search import VaneSearchClient
 from alfred.vision import VisionConfig
 
 
@@ -22,54 +25,30 @@ class AgentConfig:
     base_dir: str
     codex_exe: str
     system_prompt: str
-    ru_weather_words: list[str]
-    ru_search_words: list[str]
-    ru_fact_words: list[str]
     plan_storage_path: str
+    vane_url: str = ""
+    vane_chat_model: str = "hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M"
+    vane_embedding_model: str = "nomic-embed-text:latest"
+    vane_timeout: float = 30.0
+    searxng_url: str = ""
     vision_config: VisionConfig | None = None
+    ocr_engine: object | None = None
 
 
 def build_tool_registry(config: AgentConfig) -> ToolRegistry:
     return ToolRegistry(
-        SystemTool(
-            SystemToolConfig(
-                app_aliases={
-                    "browser": "https://www.google.com",
-                    "youtube": "https://www.youtube.com",
-                    "google": "https://www.google.com",
-                    "\u0431\u0440\u0430\u0443\u0437\u0435\u0440": "https://www.google.com",
-                    "\u044e\u0442\u0443\u0431": "https://www.youtube.com",
-                    "steam": r"C:\Program Files (x86)\Steam\Steam.exe",
-                    "\u0441\u0442\u0438\u043c": r"C:\Program Files (x86)\Steam\Steam.exe",
-                    "discord": os.path.join(os.environ.get("LOCALAPPDATA", ""), "Discord", "Update.exe"),
-                    "telegram": os.path.join(os.environ.get("APPDATA", ""), "Telegram Desktop", "Telegram.exe"),
-                    "\u0442\u0435\u043b\u0435\u0433\u0440\u0430\u043c": os.path.join(os.environ.get("APPDATA", ""), "Telegram Desktop", "Telegram.exe"),
-                    "chrome": os.path.join(os.environ.get("ProgramFiles", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                    "\u0445\u0440\u043e\u043c": os.path.join(os.environ.get("ProgramFiles", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                    "vscode": os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Microsoft VS Code", "Code.exe"),
-                    "vs code": os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Microsoft VS Code", "Code.exe"),
-                    "visual studio code": os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Microsoft VS Code", "Code.exe"),
-                    "obsidian": os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Obsidian", "Obsidian.exe"),
-                    "notepad": "notepad.exe",
-                    "\u0431\u043b\u043e\u043a\u043d\u043e\u0442": "notepad.exe",
-                    "calculator": "calc.exe",
-                    "\u043a\u0430\u043b\u044c\u043a\u0443\u043b\u044f\u0442\u043e\u0440": "calc.exe",
-                    "explorer": "explorer.exe",
-                    "\u043f\u0440\u043e\u0432\u043e\u0434\u043d\u0438\u043a": "explorer.exe",
-                }
-            )
-        ),
+        SystemTool(),
         LocalFilesTool(
             LocalFilesToolConfig(
                 base_dir=config.base_dir,
             )
         ),
         WebTool(
-            WebToolConfig(
-                ru_weather_words=config.ru_weather_words,
-                ru_search_words=config.ru_search_words,
-                ru_fact_words=config.ru_fact_words,
-            )
+            VaneSearchClient(
+                config.vane_url, config.vane_chat_model,
+                config.vane_embedding_model, config.vane_timeout,
+            ) if config.vane_url else None,
+            searxng_url=config.searxng_url,
         ),
         CodexTool(
             CodexToolConfig(
@@ -97,7 +76,7 @@ def agent_loop(
     conversation_memory,
     config: AgentConfig,
     ollama_chat,
-    router_ollama_chat,
+    decider,
     normalize_memory_text,
     detect_language,
     fetch_url,
@@ -105,6 +84,8 @@ def agent_loop(
     generate_image_payload,
 ):
     print("[AGENT] Router started.")
+    computer_actions = ComputerActionRunner(tool_registry, config.base_dir, event_out_queue=event_out,
+                                            ocr_engine=config.ocr_engine)
     while True:
         user_text = event_in.get()
         if not user_text:
@@ -120,9 +101,10 @@ def agent_loop(
             user_text=user_text,
             language=language,
             system_prompt=config.system_prompt,
-            recent_history=conversation_memory.recent_history(4),
+            recent_history=conversation_memory.recent_history(12),
             ollama_chat=ollama_chat,
-            router_ollama_chat=router_ollama_chat,
+            ollama_structured_chat=getattr(ollama_chat, "structured", None),
+            decider=decider,
             normalize_memory_text=normalize_memory_text,
             detect_language=detect_language,
             fetch_url=fetch_url,
@@ -134,8 +116,65 @@ def agent_loop(
             assistant_control=getattr(config, "assistant_control", None),
             event_out_queue=event_out,
         )
-        route_decision = analyze_request(tool_context, user_text, tool_registry)
+        if computer_actions.pending is not None:
+            try:
+                reply_text = computer_actions.resolve_confirmation(tool_context)
+            except Exception as exc:
+                computer_actions.pending = None
+                reply_text = (f"Не удалось проверить подтверждение: {exc}" if language == "ru"
+                              else f"Could not verify confirmation: {exc}")
+            if reply_text != "new_request":
+                conversation_memory.append("assistant", reply_text)
+                event_out.put(reply_text)
+                continue
+        try:
+            wants_computer_actions = computer_actions.wants_actions(tool_context)
+        except Exception as exc:
+            print(f"[ACTIONS] Planner gate failed: {exc}")
+            wants_computer_actions = False
+        if wants_computer_actions:
+            try:
+                reply_text = computer_actions.run(tool_context)
+            except Exception as exc:
+                reply_text = (f"Не удалось выполнить действие: {exc}" if language == "ru"
+                              else f"Could not perform action: {exc}")
+            conversation_memory.append("assistant", reply_text)
+            event_out.put(reply_text)
+            continue
+        route_started_at = time.perf_counter()
+        try:
+            route_decision = analyze_request(tool_context, user_text, tool_registry)
+        except RuntimeError as exc:
+            reply_text = (
+                f"Не удалось определить действие: {exc}"
+                if language == "ru"
+                else f"I could not determine the action: {exc}"
+            )
+            conversation_memory.append("assistant", reply_text)
+            event_out.put(reply_text)
+            continue
+        route_elapsed = time.perf_counter() - route_started_at
+        if route_decision.intent == "unsupported_physical_action":
+            reply_text = (
+                "Я не могу управлять предметами или освещением без подключённого устройства."
+                if language == "ru" else
+                "I can't control physical objects or room lighting without a connected device."
+            )
+            conversation_memory.append("assistant", reply_text)
+            event_out.put(reply_text)
+            continue
+        if route_decision.intent in {"system_open", "browser_open", "local_files", "music_play", "music_control", "codex_request"}:
+            reply_text = computer_actions.run(tool_context)
+            conversation_memory.append("assistant", reply_text)
+            event_out.put(reply_text)
+            continue
+        planning_started_at = time.perf_counter()
         route_decision = refine_route_with_planning(tool_context, user_text, route_decision)
+        planning_elapsed = time.perf_counter() - planning_started_at
+        print(
+            f"[PERF] Routing={route_elapsed:.3f}s Planning={planning_elapsed:.3f}s "
+            f"intent={route_decision.intent} tool={route_decision.tool_name}"
+        )
         routed_context = replace(
             tool_context,
             routed_intent=route_decision.intent,
@@ -150,7 +189,10 @@ def agent_loop(
                 f"[ROUTER] Dispatching routed tool: {route_decision.tool_name} "
                 f"for intent={route_decision.intent}"
             )
+            tool_started_at = time.perf_counter()
             tool_result = routed_tool.handle(routed_context, user_text)
+            tool_elapsed = time.perf_counter() - tool_started_at
+            print(f"[PERF] Tool {route_decision.tool_name} handled request in {tool_elapsed:.3f}s")
         else:
             tool_result = None
         if tool_result is not None and tool_result.handled:
@@ -168,7 +210,19 @@ def agent_loop(
                 f"{config.system_prompt}\n{build_reply_language_instruction(language)}"
             )
             messages = conversation_memory.build_messages(reply_language_instruction, user_text)
+            llm_started_at = time.perf_counter()
             response = ollama_chat(messages)
+            llm_elapsed = time.perf_counter() - llm_started_at
+            print(f"[PERF] Main chat LLM replied in {llm_elapsed:.3f}s")
+            if response.get("total_duration") is not None:
+                print(
+                    "[PERF] Ollama timings: "
+                    f"load={(response.get('load_duration') or 0) / 1_000_000_000:.3f}s, "
+                    f"prefill={(response.get('prompt_eval_duration') or 0) / 1_000_000_000:.3f}s, "
+                    f"decode={(response.get('eval_duration') or 0) / 1_000_000_000:.3f}s, "
+                    f"input_tokens={response.get('prompt_eval_count') or 0}, "
+                    f"output_tokens={response.get('eval_count') or 0}"
+                )
             raw_reply_text = response.get("message", {}).get("content", "")
             reply_text = normalize_memory_text(raw_reply_text)
             if not reply_text:
@@ -178,6 +232,8 @@ def agent_loop(
                     if language == "ru"
                     else "Sorry, I couldn't form a reply. Please try rephrasing your request."
                 )
+            elif route_decision.intent == "chat":
+                reply_text = _maybe_answer_from_web(tool_context, tool_registry, user_text, reply_text)
         except Exception as e:
             reply_text = (
                 f"\u041e\u0448\u0438\u0431\u043a\u0430 Ollama: {e}"
@@ -187,3 +243,44 @@ def agent_loop(
 
         conversation_memory.append("assistant", reply_text)
         event_out.put(reply_text)
+
+
+def _maybe_answer_from_web(context: ToolContext, tool_registry: ToolRegistry, user_text: str, draft: str) -> str:
+    try:
+        decision = context.decider.choose(
+            {
+                "recent_conversation": context.recent_history or [],
+                "user_message": user_text,
+                "assistant_draft": draft,
+            },
+            "What should Alfred do with this draft? Consider the full conversation and the source needed to answer.",
+            {
+                "search": "The user asked about a named subject or requested facts, and the draft says it does not know, is uncertain, or deflects without answering. Find facts online before answering.",
+                "vision": "The user asks what is physically visible near them right now, or the draft requests a photo for such a question. Alfred should inspect the camera directly.",
+                "reply": "The user did not ask for factual information, or the draft already gives a useful factual answer. Questions about Alfred's abilities are reply.",
+            },
+        )
+    except Exception as exc:
+        print(f"[WEB] Automatic search decision failed: {exc}")
+        return draft
+    if decision == "vision":
+        if context.analyze_vision is None:
+            return "Я не могу сейчас посмотреть через камеру." if context.language == "ru" else "I cannot access the camera right now."
+        print("[VISION] Chat answer requires camera; inspecting now.")
+        return context.analyze_vision(user_text)
+    if decision != "search":
+        return draft
+    failure_reply = (
+        "Я не смог проверить это в интернете. Можете дать ссылку на источник или уточнить, что именно вас интересует?"
+        if context.language == "ru"
+        else "I could not verify this online. Can you share a source or clarify what you want to know?"
+    )
+    web_tool = tool_registry.get_tool("web")
+    if not isinstance(web_tool, WebTool):
+        return failure_reply
+    print("[WEB] Chat answer needs verification; searching before reply.")
+    try:
+        return web_tool.search_and_answer(context, user_text, automatic=True) or failure_reply
+    except Exception as exc:
+        print(f"[WEB] Automatic search failed: {exc}")
+        return failure_reply

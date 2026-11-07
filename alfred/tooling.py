@@ -9,17 +9,19 @@ class ToolContext:
     system_prompt: str
     recent_history: list[dict[str, str]]
     ollama_chat: Callable[[list[dict[str, str]]], Any]
-    router_ollama_chat: Callable[[list[dict[str, str]]], Any]
+    decider: Any
     normalize_memory_text: Callable[[str], str]
     detect_language: Callable[[str], str]
-    fetch_url: Callable[[str], str]
+    fetch_url: Callable[..., str]
     fetch_json: Callable[..., dict[str, Any]]
+    ollama_structured_chat: Callable[[list[dict[str, str]]], Any] | None = None
     generate_image: Callable[[str], Any] | None = None
     analyze_vision: Callable[[str], str] | None = None
     analyze_screen: Callable[[str], str] | None = None
     restart_listener: Callable[[], None] | None = None
     assistant_control: Callable[..., None] | None = None
     event_out_queue: Any = None
+    web_search_announced: bool = False
     routed_intent: str | None = None
     routed_tool_name: str | None = None
     routed_query: str | None = None
@@ -32,6 +34,12 @@ class ToolResult:
     reply_text: str | None = None
     target: str | None = None
     image_payload: Any = None
+
+
+@dataclass(frozen=True)
+class AssistantOutput:
+    text: str
+    interim: bool = False
 
 
 class Tool(Protocol):

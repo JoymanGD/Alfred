@@ -1,3 +1,4 @@
+import gc
 import threading
 import time
 from io import BytesIO
@@ -51,8 +52,8 @@ class ModelServices:
 
     def _missing_image_dependency_message(self) -> str:
         return (
-            "Image generation dependencies are missing. Install them with "
-            "`.venv\\Scripts\\python.exe -m pip install diffusers transformers accelerate safetensors`."
+            "Image generation requires a Diffusers version with ZImagePipeline. Install it with "
+            "`.venv\\Scripts\\python.exe -m pip install \"diffusers>=0.40,<0.41\" transformers accelerate safetensors`."
         )
 
     def _is_missing_image_dependency_error(self, error: Exception) -> bool:
@@ -103,7 +104,7 @@ class ModelServices:
                             self.config.image_torch_dtype
                         )
                     try:
-                        self._image_pipe = ZImagePipeline.from_pretrained(
+                        image_pipe = ZImagePipeline.from_pretrained(
                             self.config.image_model_id,
                             **pipe_kwargs,
                         )
@@ -112,15 +113,20 @@ class ModelServices:
                             raise RuntimeError(self._missing_image_dependency_message()) from e
                         raise
                     if self.config.image_sampler.lower() in {"euler_a", "euler-a", "euler a"}:
-                        self._image_pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(
-                            self._image_pipe.scheduler.config,
+                        image_pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(
+                            image_pipe.scheduler.config,
                             stochastic_sampling=True,
                         )
                         print("[ZIT] Sampler set to Euler a compatible mode.")
-                    self._image_pipe.to(image_device)
+                    cpu_offload = image_device.startswith("cuda") and self.config.image_cpu_offload
+                    if cpu_offload:
+                        image_pipe.enable_model_cpu_offload()
+                        print("[ZIT] CPU offload enabled to reserve GPU memory for voice synthesis.")
+                    else:
+                        image_pipe.to(image_device)
                     if image_device.startswith("cuda") and self.config.image_attention_backend:
                         try:
-                            self._image_pipe.transformer.set_attention_backend(
+                            image_pipe.transformer.set_attention_backend(
                                 self.config.image_attention_backend
                             )
                             print(
@@ -129,33 +135,57 @@ class ModelServices:
                             )
                         except Exception as e:
                             print(f"[ZIT] Failed to set attention backend: {e}")
-                    if image_device.startswith("cuda") and compile_enabled:
+                    if image_device.startswith("cuda") and compile_enabled and not cpu_offload:
                         try:
-                            self._image_pipe.transformer.compile()
+                            image_pipe.transformer.compile()
                             print("[ZIT] Transformer compile enabled.")
                         except Exception as e:
                             print(f"[ZIT] Transformer compile failed: {e}")
+                    if cpu_offload and compile_enabled:
+                        print("[ZIT] Transformer compile disabled while CPU offload is enabled.")
+                    self._image_pipe = image_pipe
                     print(
                         f"[ZIT] Image pipeline loaded on {image_device} "
                         f"(model={self.config.image_model_id}, dtype={self.config.image_torch_dtype})."
                     )
         return self._image_pipe
 
+    def warmup_image_pipe(self):
+        try:
+            return self.get_image_pipe()
+        except RuntimeError as exc:
+            if not self.get_image_device().startswith("cuda") or "out of memory" not in str(exc).lower():
+                raise
+            print(f"[ZIT] CUDA memory is insufficient for the image model: {exc}. Loading it on CPU.")
+            self._image_pipe = None
+            self._resolved_image_device = "cpu"
+            gc.collect()
+            torch.cuda.empty_cache()
+            return self.get_image_pipe(use_compile=False)
+
     def get_asr_model(self):
         if self._asr_model is None:
             with self._asr_lock:
                 if self._asr_model is None:
                     print(f"[ASR] Loading Whisper model: {self.config.whisper_model}...")
-                    self._asr_model = WhisperModel(
-                        self.config.whisper_model,
-                        device="cuda",
-                        compute_type=self.config.whisper_compute_type,
-                    )
+                    try:
+                        self._asr_model = WhisperModel(
+                            self.config.whisper_model,
+                            device="cuda",
+                            compute_type=self.config.whisper_compute_type,
+                        )
+                    except (RuntimeError, ValueError) as exc:
+                        print(f"[ASR] CUDA load failed: {exc}. Loading Whisper on CPU.")
+                        self._asr_model = WhisperModel(
+                            self.config.whisper_model,
+                            device="cpu",
+                            compute_type="int8",
+                        )
                     print("[ASR] Whisper loaded.")
         return self._asr_model
 
     def generate_image_payload(self, prompt: str):
-        image_pipe = self.get_image_pipe()
+        image_pipe = self.warmup_image_pipe()
         started_at = time.perf_counter()
         try:
             img = image_pipe(

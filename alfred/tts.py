@@ -64,13 +64,51 @@ class OmniVoiceTTSBackend:
         self._reference_text = (config.reference_text or "").strip() or None
         self._voice_instruct = (config.voice_instruct or "").strip() or None
         self._model: OmniVoice | None = None
+        self._voice_clone_prompt = None
+        self._session_reference_audio = None
+        self._session_reference_text = "Hello, I am Alfred, your personal assistant."
         self._supported_languages = set(LANG_IDS)
 
     def supported_languages(self) -> list[str]:
         return sorted(self._supported_languages)
 
     def warmup(self) -> None:
-        self._get_model()
+        try:
+            self._prepare_voice()
+        except RuntimeError as exc:
+            if self._device.startswith("cuda") and "cuda" in str(exc).lower():
+                print(f"[TTS] OmniVoice CUDA warmup failed: {exc}. Falling back to CPU.")
+                self._device = "cpu"
+                self._model = None
+                self._voice_clone_prompt = None
+                self._prepare_voice()
+            else:
+                raise
+
+    def _prepare_voice(self) -> None:
+        if self._voice_clone_prompt is not None:
+            return
+        model = self._get_model()
+        if self._reference_audio_path:
+            self._voice_clone_prompt = model.create_voice_clone_prompt(
+                ref_audio=self._reference_audio_path,
+                ref_text=self._reference_text,
+            )
+        else:
+            if self._session_reference_audio is None:
+                reference_audio = model.generate(
+                    text=self._session_reference_text,
+                    language="en",
+                    instruct=self._voice_instruct,
+                    normalize_text=False,
+                    num_step=16,
+                )[0]
+                self._session_reference_audio = self._to_numpy_audio(reference_audio)
+            self._voice_clone_prompt = model.create_voice_clone_prompt(
+                ref_audio=(torch.from_numpy(self._session_reference_audio), model.sampling_rate),
+                ref_text=self._session_reference_text,
+            )
+        print("[TTS] Session voice locked.")
 
     def synthesize(self, text: str, language: str):
         try:
@@ -80,18 +118,18 @@ class OmniVoiceTTSBackend:
                 print(f"[TTS] OmniVoice CUDA generation failed: {exc}. Falling back to CPU.")
                 self._device = "cpu"
                 self._model = None
+                self._voice_clone_prompt = None
                 return self._synthesize_once(text, language)
             raise
 
     def _synthesize_once(self, text: str, language: str):
+        self._prepare_voice()
         model = self._get_model()
         resolved_language = self._resolve_language(language)
         result = model.generate(
             text=text,
             language=resolved_language,
-            ref_audio=self._reference_audio_path,
-            ref_text=self._reference_text,
-            instruct=None if self._reference_audio_path else self._voice_instruct,
+            voice_clone_prompt=self._voice_clone_prompt,
             speed=1.0,
             normalize_text=False,
             num_step=16,
